@@ -1,0 +1,24 @@
+{
+  "name": "apotheon",
+  "private": true,
+  "version": "0.1.0",
+  "description": "On-chain portfolio tracker skeleton",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @apotheon/api\" \"npm run dev --workspace @apotheon/web\"",
+    "dev:api": "npm run dev --workspace @apotheon/api",
+    "dev:web": "npm run dev --workspace @apotheon/web",
+    "build": "npm run build --workspace @apotheon/api && npm run build --workspace @apotheon/web",
+    "start": "npm run start --workspace @apotheon/api",
+    "lint": "npm run lint --workspace @apotheon/api && npm run lint --workspace @apotheon/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

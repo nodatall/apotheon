@@ -1,0 +1,3 @@
+-- Scaffold placeholder migration.
+-- Intentionally no product schema yet.
+-- Schema design will be finalized during planning/PRD.
