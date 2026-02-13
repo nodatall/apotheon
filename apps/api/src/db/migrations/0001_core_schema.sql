@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS chains (
   )
 );
 
+DROP TRIGGER IF EXISTS chains_set_updated_at ON chains;
 CREATE TRIGGER chains_set_updated_at
 BEFORE UPDATE ON chains
 FOR EACH ROW
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS wallets (
   UNIQUE (chain_id, address)
 );
 
+DROP TRIGGER IF EXISTS wallets_set_updated_at ON wallets;
 CREATE TRIGGER wallets_set_updated_at
 BEFORE UPDATE ON wallets
 FOR EACH ROW
@@ -63,6 +65,7 @@ CREATE TABLE IF NOT EXISTS tracked_tokens (
   UNIQUE (chain_id, contract_or_mint)
 );
 
+DROP TRIGGER IF EXISTS tracked_tokens_set_updated_at ON tracked_tokens;
 CREATE TRIGGER tracked_tokens_set_updated_at
 BEFORE UPDATE ON tracked_tokens
 FOR EACH ROW
@@ -83,6 +86,7 @@ CREATE TABLE IF NOT EXISTS protocol_contracts (
   UNIQUE (chain_id, contract_address, label)
 );
 
+DROP TRIGGER IF EXISTS protocol_contracts_set_updated_at ON protocol_contracts;
 CREATE TRIGGER protocol_contracts_set_updated_at
 BEFORE UPDATE ON protocol_contracts
 FOR EACH ROW

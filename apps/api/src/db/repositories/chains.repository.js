@@ -26,6 +26,22 @@ export function isUniqueViolation(error) {
 }
 
 export function createChainsRepository({ pool }) {
+  async function getChainById(id) {
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id, slug, name, family, chain_id, rpc_url, is_builtin, is_active,
+          validation_status, validation_error, created_at, updated_at
+        FROM chains
+        WHERE id = $1
+        LIMIT 1
+      `,
+      [id]
+    );
+
+    return mapChainRow(rows[0]);
+  }
+
   async function listChains() {
     const { rows } = await pool.query(`
       SELECT
@@ -103,6 +119,7 @@ export function createChainsRepository({ pool }) {
 
   return {
     createChain,
+    getChainById,
     listChains,
     setChainActive,
     upsertBuiltInChains

@@ -1,7 +1,12 @@
 :root {
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #111827;
-  background: #f9fafb;
+  --bg: #f5f4ef;
+  --ink: #1f1f1a;
+  --muted: #615d52;
+  --line: #d3cfbf;
+  --card: #fffdf7;
+  --accent: #2f6a52;
+  --accent-soft: #d9eadf;
+  --error: #a23a2f;
 }
 
 * {
@@ -10,22 +15,206 @@
 
 body {
   margin: 0;
+  font-family: 'IBM Plex Sans', 'Avenir Next', 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 20% 20%, #efe4d0 0, transparent 28%),
+    radial-gradient(circle at 80% 0%, #d7ead9 0, transparent 30%),
+    var(--bg);
 }
 
-.app {
+.shell {
   min-height: 100vh;
   display: grid;
-  place-content: center;
+  grid-template-columns: 260px 1fr;
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  padding: 1.5rem;
+  background: linear-gradient(180deg, #fff 0%, #f6f2e8 100%);
+}
+
+.sidebar h1 {
+  margin: 0;
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+  font-size: 1.8rem;
+}
+
+nav {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.nav-item {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.nav-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.content {
+  padding: 1.5rem;
+}
+
+.page-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  animation: fade-up 220ms ease-out;
+}
+
+.card {
+  grid-column: span 6;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--card);
+  padding: 1rem;
+}
+
+.hero {
+  grid-column: span 12;
+}
+
+.metric {
+  font-size: 2.2rem;
+  margin: 0.3rem 0;
+  font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  padding: 0.45rem 0.2rem;
+  font-size: 0.9rem;
+}
+
+.form {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.form input,
+.form select,
+.form textarea,
+button {
+  font: inherit;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.65rem;
+  background: #fff;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+.button-row {
+  display: flex;
   gap: 0.5rem;
-  text-align: center;
-  padding: 2rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.8rem;
 }
 
-h1 {
-  margin: 0;
+.pill {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  background: #ececec;
 }
 
-p {
-  margin: 0;
-  color: #4b5563;
+.pill-success,
+.pill-ready,
+.pill-valid {
+  background: #ddf0e6;
+}
+
+.pill-failed,
+.pill-invalid {
+  background: #f5ddda;
+}
+
+.pill-partial,
+.pill-running {
+  background: #f7ebd2;
+}
+
+.meta {
+  font-size: 0.76rem;
+  overflow: auto;
+  max-height: 140px;
+  background: #f8f6f0;
+  border: 1px solid var(--line);
+  border-radius: 0.4rem;
+  padding: 0.5rem;
+}
+
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.2rem;
+  min-height: 70px;
+  margin: 0.7rem 0;
+}
+
+.sparkline span {
+  flex: 1;
+  background: linear-gradient(180deg, #7fb297, #2f6a52);
+  border-radius: 0.2rem;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .card {
+    grid-column: span 12;
+  }
 }

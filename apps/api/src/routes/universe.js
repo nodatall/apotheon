@@ -49,6 +49,27 @@ export function createUniverseRouter({
     }
   });
 
+  universeRouter.get('/:chainId/jobs/status', async (req, res, next) => {
+    try {
+      const latest = await tokenUniverseRepository.getLatestSnapshotByChain(req.params.chainId);
+      if (!latest) {
+        res.status(404).json({ error: 'No universe snapshots found for chain.' });
+        return;
+      }
+
+      res.json({
+        data: {
+          status: latest.status,
+          source: latest.source,
+          errorMessage: latest.errorMessage,
+          asOfDateUtc: latest.asOfDateUtc
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   universeRouter.post('/:chainId/refresh', async (req, res, next) => {
     const asOfDateUtc = req.body?.asOfDateUtc;
     if (asOfDateUtc !== undefined && !isValidDateOnly(asOfDateUtc)) {
