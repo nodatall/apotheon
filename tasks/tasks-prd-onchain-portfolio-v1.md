@@ -92,7 +92,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
 ## Tasks
 
 - [ ] 1.0 Build data foundation and token-universe ingestion first (highest risk)
-  - [ ] 1.1 Implement base schema for chains, wallets, tracked assets, protocols, universes, scans, and snapshots
+  - [x] 1.1 Implement base schema for chains, wallets, tracked assets, protocols, universes, scans, and snapshots
     - covers: FR-1, FR-2, FR-3, FR-6, FR-12, FR-14
     - output: `apps/api/src/db/migrations/0001_core_schema.sql`
     - verify: `npm run db:migrate --workspace @apotheon/api`
