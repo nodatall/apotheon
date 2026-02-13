@@ -107,6 +107,21 @@ export function createTokenUniverseRepository({ pool }) {
     return mapSnapshotRow(rows[0]);
   }
 
+  async function getSnapshotByChainAndDate(chainId, asOfDateUtc) {
+    const { rows } = await pool.query(
+      `
+        SELECT id, chain_id, as_of_date_utc, source, status, item_count, error_message, created_at
+        FROM token_universe_snapshots
+        WHERE chain_id = $1
+          AND as_of_date_utc = $2
+        LIMIT 1
+      `,
+      [chainId, asOfDateUtc]
+    );
+
+    return mapSnapshotRow(rows[0]);
+  }
+
   async function getLatestScanEligibleSnapshot(chainId) {
     const { rows } = await pool.query(
       `
@@ -164,6 +179,7 @@ export function createTokenUniverseRepository({ pool }) {
   return {
     getLatestScanEligibleSnapshot,
     getLatestSnapshotByChain,
+    getSnapshotByChainAndDate,
     getSnapshotItems,
     getSnapshotWithItems,
     replaceSnapshotItems,

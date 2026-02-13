@@ -112,7 +112,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
     - output: `apps/api/src/services/universe/universe-sources/coingecko.client.js`
     - verify: `npm run test --workspace @apotheon/api -- universe-fallback`
     - done_when: fallback builds ordered per-chain universe from markets + platform contract mapping
-  - [ ] 1.5 Implement partial/failure handling and previous-snapshot retention
+  - [x] 1.5 Implement partial/failure handling and previous-snapshot retention
     - covers: FR-8, FR-9, FR-18
     - output: `apps/api/src/db/repositories/token-universe.repository.js`, `apps/api/src/routes/universe.js`
     - verify: `npm run test --workspace @apotheon/api -- universe-state`

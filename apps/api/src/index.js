@@ -3,20 +3,46 @@ import dotenv from 'dotenv';
 import express from 'express';
 import { pool } from './db/pool.js';
 import { createChainsRepository } from './db/repositories/chains.repository.js';
+import { createTokenUniverseRepository } from './db/repositories/token-universe.repository.js';
 import { healthRouter } from './routes/health.js';
 import { createChainsRouter } from './routes/chains.js';
+import { createUniverseRouter } from './routes/universe.js';
 import { BUILTIN_CHAINS } from './services/chains/builtin-chains.js';
 import { createChainValidationService } from './services/chains/chain-validation.service.js';
+import { createUniverseRefreshService } from './services/universe/universe-refresh.service.js';
+import { createBirdeyeClient } from './services/universe/universe-sources/birdeye.client.js';
+import { createCoinGeckoClient } from './services/universe/universe-sources/coingecko.client.js';
 
 dotenv.config();
 
-export function createApp({ chainsRepository, chainValidationService } = {}) {
+export function createApp({
+  chainsRepository,
+  tokenUniverseRepository,
+  chainValidationService,
+  universeRefreshService
+} = {}) {
   const app = express();
   const resolvedChainsRepository = chainsRepository ?? createChainsRepository({ pool });
+  const resolvedTokenUniverseRepository =
+    tokenUniverseRepository ?? createTokenUniverseRepository({ pool });
   const resolvedChainValidationService =
     chainValidationService ??
     createChainValidationService({
       allowUnsafeLocalRpc: process.env.ALLOW_UNSAFE_RPC_URLS === 'true'
+    });
+  let coingeckoClient = null;
+  try {
+    coingeckoClient = createCoinGeckoClient();
+  } catch (_error) {
+    coingeckoClient = null;
+  }
+  const resolvedUniverseRefreshService =
+    universeRefreshService ??
+    createUniverseRefreshService({
+      chainsRepository: resolvedChainsRepository,
+      tokenUniverseRepository: resolvedTokenUniverseRepository,
+      birdeyeClient: createBirdeyeClient(),
+      coingeckoClient
     });
 
   app.use(cors());
@@ -28,6 +54,13 @@ export function createApp({ chainsRepository, chainValidationService } = {}) {
     createChainsRouter({
       chainsRepository: resolvedChainsRepository,
       chainValidationService: resolvedChainValidationService
+    })
+  );
+  app.use(
+    '/api/universe',
+    createUniverseRouter({
+      tokenUniverseRepository: resolvedTokenUniverseRepository,
+      universeRefreshService: resolvedUniverseRefreshService
     })
   );
 

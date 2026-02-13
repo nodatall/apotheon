@@ -77,6 +77,10 @@ test('refreshAllChains skips inactive chains and stores failed snapshots', async
           ...input
         };
       },
+      getSnapshotByChainAndDate: async () => null,
+      getLatestScanEligibleSnapshot: async () => ({
+        id: 'previous-active'
+      }),
       replaceSnapshotItems: async () => {}
     },
     birdeyeClient: {

@@ -15,6 +15,10 @@ function toRankedItems(rawItems) {
   }));
 }
 
+function isScanEligible(status) {
+  return status === 'ready' || status === 'partial';
+}
+
 export function createUniverseRefreshService({
   chainsRepository,
   tokenUniverseRepository,
@@ -46,6 +50,10 @@ export function createUniverseRefreshService({
     });
 
     await tokenUniverseRepository.replaceSnapshotItems(snapshot.id, rankedItems);
+    const activeSnapshot =
+      snapshot.status === 'failed'
+        ? await tokenUniverseRepository.getLatestScanEligibleSnapshot(chain.id)
+        : snapshot;
 
     return {
       chainId: chain.id,
@@ -53,7 +61,8 @@ export function createUniverseRefreshService({
       source: snapshot.source,
       status: snapshot.status,
       itemCount: snapshot.itemCount,
-      errorMessage: snapshot.errorMessage
+      errorMessage: snapshot.errorMessage,
+      activeSnapshotId: activeSnapshot?.id ?? null
     };
   }
 
@@ -99,6 +108,47 @@ export function createUniverseRefreshService({
     }
   }
 
+  async function handleDualSourceFailure({ chain, asOfDateUtc, errorMessage }) {
+    const existingSameDate = await tokenUniverseRepository.getSnapshotByChainAndDate(
+      chain.id,
+      asOfDateUtc
+    );
+
+    if (existingSameDate && isScanEligible(existingSameDate.status)) {
+      return {
+        chainId: chain.id,
+        snapshotId: existingSameDate.id,
+        source: existingSameDate.source,
+        status: existingSameDate.status,
+        itemCount: existingSameDate.itemCount,
+        errorMessage,
+        activeSnapshotId: existingSameDate.id
+      };
+    }
+
+    return persistSnapshot({
+      chain,
+      asOfDateUtc,
+      source: existingSameDate?.source ?? 'birdeye',
+      rankedItems: [],
+      errorMessage
+    });
+  }
+
+  async function refreshChainById({ chainId, asOfDateUtc }) {
+    const chains = await chainsRepository.listChains();
+    const chain = chains.find((item) => item.id === chainId);
+
+    if (!chain) {
+      throw new Error(`Chain not found: ${chainId}`);
+    }
+
+    return refreshChain({
+      chain,
+      asOfDateUtc: asOfDateUtc ?? toUtcDateString(new Date())
+    });
+  }
+
   async function refreshAllChains({ asOfDateUtc = toUtcDateString(new Date()) } = {}) {
     const chains = await chainsRepository.listChains();
     const activeChains = chains.filter((chain) => chain.isActive);
@@ -112,11 +162,9 @@ export function createUniverseRefreshService({
           error instanceof Error ? error.message : 'Unknown universe refresh failure';
 
         outcomes.push(
-          await persistSnapshot({
+          await handleDualSourceFailure({
             chain,
             asOfDateUtc,
-            source: 'birdeye',
-            rankedItems: [],
             errorMessage: message
           })
         );
@@ -128,6 +176,7 @@ export function createUniverseRefreshService({
 
   return {
     refreshAllChains,
-    refreshChain
+    refreshChain,
+    refreshChainById
   };
 }
