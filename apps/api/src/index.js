@@ -1,6 +1,7 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
+import { loadRuntimeEnv } from './config/env.js';
 import { pool } from './db/pool.js';
 import { createChainsRepository } from './db/repositories/chains.repository.js';
 import { createTokenUniverseRepository } from './db/repositories/token-universe.repository.js';
@@ -19,7 +20,8 @@ export function createApp({
   chainsRepository,
   tokenUniverseRepository,
   chainValidationService,
-  universeRefreshService
+  universeRefreshService,
+  runtimeEnv = loadRuntimeEnv()
 } = {}) {
   const app = express();
   const resolvedChainsRepository = chainsRepository ?? createChainsRepository({ pool });
@@ -28,14 +30,11 @@ export function createApp({
   const resolvedChainValidationService =
     chainValidationService ??
     createChainValidationService({
-      allowUnsafeLocalRpc: process.env.ALLOW_UNSAFE_RPC_URLS === 'true'
+      allowUnsafeLocalRpc: runtimeEnv.allowUnsafeRpcUrls
     });
-  let coingeckoClient = null;
-  try {
-    coingeckoClient = createCoinGeckoClient();
-  } catch (_error) {
-    coingeckoClient = null;
-  }
+  const coingeckoClient = createCoinGeckoClient({
+    apiKey: runtimeEnv.coingeckoApiKey
+  });
   const resolvedUniverseRefreshService =
     universeRefreshService ??
     createUniverseRefreshService({
@@ -84,15 +83,19 @@ async function seedBuiltInChains(chainsRepository) {
 }
 
 async function start() {
-  const port = Number(process.env.PORT || 4000);
-  const { app, chainsRepository } = createApp();
+  const runtimeEnv = loadRuntimeEnv();
+  const { app, chainsRepository } = createApp({ runtimeEnv });
   await seedBuiltInChains(chainsRepository);
 
-  app.listen(port, () => {
-    console.log(`API listening on http://localhost:${port}`);
+  app.listen(runtimeEnv.port, () => {
+    console.log(`API listening on http://localhost:${runtimeEnv.port}`);
   });
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  start();
+  start().catch((error) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  });
 }

@@ -61,6 +61,13 @@ See `rules/task-management.md` for task workflow and review guidelines.
 - `apps/api/src/routes/universe.js` - Token universe read/refresh endpoints.
 - `apps/api/src/routes/snapshots.js` - Snapshot run/read endpoints.
 - `apps/api/src/routes/portfolio.js` - Portfolio history endpoints.
+- `apps/api/src/routes/chains.test.js` - Route-level tests for chain CRUD validation/error behavior.
+- `apps/api/src/services/chains/chain-validation.service.test.js` - Unit tests for RPC validation status outcomes.
+- `apps/api/src/services/chains/rpc-url-safety.test.js` - SSRF safety regression tests for RPC URL validation.
+- `apps/api/src/services/universe/universe-refresh.service.test.js` - Universe refresh orchestration tests for Birdeye behavior.
+- `apps/api/src/services/universe/universe-fallback.test.js` - CoinGecko fallback derivation tests.
+- `apps/api/src/services/universe/universe-state.test.js` - Partial/failure retention tests for scan-eligible state.
+- `apps/api/src/test/run-tests.js` - Filterable Node test runner used by task verify commands.
 - `apps/web/src/pages/Dashboard.jsx` - Dashboard view.
 - `apps/web/src/pages/Assets.jsx` - Assets and token tracking UI.
 - `apps/web/src/pages/Protocols.jsx` - Protocol contract configuration UI.
@@ -82,6 +89,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
 - `.github/workflows/ci.yml` - CI merge gate for deterministic suites only (live smoke excluded).
 - `docs/e2e-traceability.md` - User Story -> E2E mapping document.
 - `docs/live-smoke.md` - Operator instructions and artifact contract for live smoke runs.
+- `.env.example` - Example runtime variables including required `COINGECKO_API_KEY`.
 
 ### Notes
 - Co-locate unit tests beside source files when practical.
@@ -91,7 +99,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
 
 ## Tasks
 
-- [ ] 1.0 Build data foundation and token-universe ingestion first (highest risk)
+- [x] 1.0 Build data foundation and token-universe ingestion first (highest risk)
   - [x] 1.1 Implement base schema for chains, wallets, tracked assets, protocols, universes, scans, and snapshots
     - covers: FR-1, FR-2, FR-3, FR-6, FR-12, FR-14
     - output: `apps/api/src/db/migrations/0001_core_schema.sql`
@@ -117,7 +125,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
     - output: `apps/api/src/db/repositories/token-universe.repository.js`, `apps/api/src/routes/universe.js`
     - verify: `npm run test --workspace @apotheon/api -- universe-state`
     - done_when: `partial` universes are scan-eligible and dual-source failure preserves previous active universe
-  - [ ] 1.6 Enforce required CoinGecko API key at startup
+  - [x] 1.6 Enforce required CoinGecko API key at startup
     - covers: FR-23
     - output: `apps/api/src/config/env.js`, `apps/api/src/index.js`
     - verify: `env -u COINGECKO_API_KEY npm run start --workspace @apotheon/api`
