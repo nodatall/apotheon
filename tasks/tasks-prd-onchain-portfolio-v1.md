@@ -107,7 +107,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
     - output: `apps/api/src/services/universe/universe-refresh.service.js`, `apps/api/src/services/universe/universe-sources/birdeye.client.js`
     - verify: `npm run test --workspace @apotheon/api -- universe-refresh`
     - done_when: refresh writes ranked per-chain snapshots with source `birdeye` when provider succeeds
-  - [ ] 1.4 Implement CoinGecko fallback universe derivation
+  - [x] 1.4 Implement CoinGecko fallback universe derivation
     - covers: FR-7
     - output: `apps/api/src/services/universe/universe-sources/coingecko.client.js`
     - verify: `npm run test --workspace @apotheon/api -- universe-fallback`
