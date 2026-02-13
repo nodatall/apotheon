@@ -102,7 +102,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
     - output: `apps/api/src/services/chains/chain-validation.service.js`, `apps/api/src/routes/chains.js`
     - verify: `npm run test --workspace @apotheon/api -- chains`
     - done_when: built-in chains load, custom chains validate or fail with explicit `validation_status`, and SSRF-unsafe RPC targets are rejected by default
-  - [ ] 1.3 Implement daily universe refresh job using Birdeye primary source
+  - [x] 1.3 Implement daily universe refresh job using Birdeye primary source
     - covers: FR-6, FR-7, FR-18
     - output: `apps/api/src/services/universe/universe-refresh.service.js`, `apps/api/src/services/universe/universe-sources/birdeye.client.js`
     - verify: `npm run test --workspace @apotheon/api -- universe-refresh`
