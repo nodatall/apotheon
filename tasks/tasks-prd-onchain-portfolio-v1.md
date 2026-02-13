@@ -97,7 +97,7 @@ See `rules/task-management.md` for task workflow and review guidelines.
     - output: `apps/api/src/db/migrations/0001_core_schema.sql`
     - verify: `npm run db:migrate --workspace @apotheon/api`
     - done_when: all required tables/enums/constraints from PRD Appendix A exist and migration succeeds on clean DB
-  - [ ] 1.2 Implement chain CRUD + RPC validation flow
+  - [x] 1.2 Implement chain CRUD + RPC validation flow
     - covers: FR-2, FR-18, FR-21
     - output: `apps/api/src/services/chains/chain-validation.service.js`, `apps/api/src/routes/chains.js`
     - verify: `npm run test --workspace @apotheon/api -- chains`
