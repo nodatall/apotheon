@@ -23,6 +23,16 @@ export function createAssetsRouter({ chainsRepository, manualTokenService, track
       return;
     }
 
+    let decimals;
+    if (req.body?.decimals !== undefined) {
+      const parsedDecimals = Number(req.body.decimals);
+      if (!Number.isInteger(parsedDecimals) || parsedDecimals < 0) {
+        res.status(400).json({ error: 'decimals must be a non-negative integer when provided.' });
+        return;
+      }
+      decimals = parsedDecimals;
+    }
+
     try {
       const chain = await chainsRepository.getChainById(chainId);
       if (!chain) {
@@ -35,7 +45,7 @@ export function createAssetsRouter({ chainsRepository, manualTokenService, track
         contractOrMint,
         symbol: req.body?.symbol,
         name: req.body?.name,
-        decimals: req.body?.decimals
+        decimals
       });
 
       res.status(201).json({ data: token });

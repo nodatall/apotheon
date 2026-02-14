@@ -1,3 +1,5 @@
+import { normalizeAddressForChain } from '../shared/address-normalization.js';
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -36,6 +38,12 @@ export function createWalletScanService({
 
     try {
       const universeItems = await tokenUniverseRepository.getSnapshotItems(snapshot.id);
+      const universeByAddress = new Map(
+        universeItems.map((item) => [
+          normalizeAddressForChain({ family: chain.family, address: item.contractOrMint }),
+          item
+        ])
+      );
       const balances = await balanceBatcher.resolveBalances({
         chain,
         walletAddress: wallet.address,
@@ -49,6 +57,11 @@ export function createWalletScanService({
 
       let autoTrackedCount = 0;
       for (const balance of balances) {
+        const normalizedContract = normalizeAddressForChain({
+          family: chain.family,
+          address: balance.contractOrMint
+        });
+        const tokenMetadata = universeByAddress.get(normalizedContract);
         const heldFlag = Number(balance.balanceNormalized) > 0;
         let tokenId = null;
         let autoTrackedFlag = false;
@@ -56,10 +69,10 @@ export function createWalletScanService({
         if (heldFlag) {
           const token = await trackedTokensRepository.upsertTrackedToken({
             chainId: wallet.chainId,
-            contractOrMint: balance.contractOrMint,
-            symbol: universeItems.find((item) => item.contractOrMint === balance.contractOrMint)?.symbol ?? null,
-            name: universeItems.find((item) => item.contractOrMint === balance.contractOrMint)?.name ?? null,
-            decimals: universeItems.find((item) => item.contractOrMint === balance.contractOrMint)?.decimals ?? null,
+            contractOrMint: normalizedContract,
+            symbol: tokenMetadata?.symbol ?? null,
+            name: tokenMetadata?.name ?? null,
+            decimals: tokenMetadata?.decimals ?? null,
             metadataSource: 'auto',
             trackingSource: 'scan'
           });
@@ -71,7 +84,7 @@ export function createWalletScanService({
         await scansRepository.upsertScanItem({
           scanId: run.id,
           tokenId,
-          contractOrMint: balance.contractOrMint,
+          contractOrMint: normalizedContract,
           balanceRaw: balance.balanceRaw,
           balanceNormalized: balance.balanceNormalized,
           heldFlag,
@@ -102,12 +115,8 @@ export function createWalletScanService({
     }
   }
 
-  async function rescanWallet({ walletId }) {
-    return runScan({ walletId });
-  }
-
   return {
-    rescanWallet,
+    rescanWallet: runScan,
     runScan
   };
 }

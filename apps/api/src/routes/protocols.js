@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { normalizeAddressForChain } from '../services/shared/address-normalization.js';
+import { AbiMappingValidationError } from '../services/protocols/abi-mapping-validator.js';
 
 export function createProtocolsRouter({ chainsRepository, protocolContractService }) {
   const router = Router();
@@ -39,9 +41,14 @@ export function createProtocolsRouter({ chainsRepository, protocolContractServic
         return;
       }
 
+      const normalizedContractAddress = normalizeAddressForChain({
+        family: chain.family,
+        address: contractAddress
+      });
+
       const contract = await protocolContractService.createProtocolContract({
         chainId,
-        contractAddress,
+        contractAddress: normalizedContractAddress,
         label,
         category,
         abiMapping: req.body.abiMapping
@@ -49,6 +56,14 @@ export function createProtocolsRouter({ chainsRepository, protocolContractServic
 
       res.status(201).json({ data: contract });
     } catch (error) {
+      if (error instanceof AbiMappingValidationError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
+      if (error?.code === '23505') {
+        res.status(409).json({ error: 'Protocol contract already exists for this chain/label.' });
+        return;
+      }
       next(error);
     }
   });

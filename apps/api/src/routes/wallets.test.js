@@ -99,3 +99,39 @@ test('wallets: blocks duplicate wallet with 409', async () => {
 
   assert.equal(response.status, 409);
 });
+
+test('wallets: normalizes evm address casing before persistence', async () => {
+  let savedAddress = null;
+
+  const baseUrl = await startServer(
+    createWalletsRouter({
+      chainsRepository: {
+        getChainById: async () => ({ id: 'c1', family: 'evm' })
+      },
+      walletsRepository: {
+        createWallet: async ({ address }) => {
+          savedAddress = address;
+          return { id: 'wallet-1', chainId: 'c1', address };
+        }
+      },
+      scansRepository: {
+        getLatestScanByWallet: async () => null
+      },
+      walletScanService: {
+        runScan: async () => ({ scanRun: { id: 'scan-1', status: 'success' }, universeSnapshotId: 'snapshot-1' })
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/wallets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      chainId: 'c1',
+      address: '0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD'
+    })
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(savedAddress, '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
+});

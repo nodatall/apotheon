@@ -18,7 +18,7 @@ test('manual-token: registration supports metadata overrides and idempotent upse
   });
 
   const token = await service.registerManualToken({
-    chain: { id: 'chain-1' },
+    chain: { id: 'chain-1', family: 'evm' },
     contractOrMint: '0xABC',
     symbol: 'OVR'
   });
@@ -26,5 +26,5 @@ test('manual-token: registration supports metadata overrides and idempotent upse
   assert.equal(token.symbol, 'OVR');
   assert.equal(token.metadataSource, 'manual_override');
   assert.equal(writes[0].trackingSource, 'manual');
-  assert.equal(writes[0].contractOrMint, '0xABC');
+  assert.equal(writes[0].contractOrMint, '0xabc');
 });

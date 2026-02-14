@@ -1,8 +1,10 @@
-function normalizeContractOrMint(value) {
-  return typeof value === 'string' ? value.trim() : '';
-}
+import { normalizeAddressForChain } from '../shared/address-normalization.js';
 
-export function createManualTokenService({ trackedTokensRepository, metadataClient = null }) {
+export function createManualTokenService({
+  trackedTokensRepository,
+  metadataClient = null,
+  logger = console
+}) {
   async function resolveMetadata({ chain, contractOrMint }) {
     if (!metadataClient) {
       return {
@@ -19,7 +21,12 @@ export function createManualTokenService({ trackedTokensRepository, metadataClie
         name: metadata?.name ?? null,
         decimals: Number.isInteger(metadata?.decimals) ? metadata.decimals : null
       };
-    } catch (_error) {
+    } catch (error) {
+      logger.warn?.(
+        `Token metadata fetch failed for chain=${chain.slug || chain.id} contract=${contractOrMint}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
       return {
         symbol: null,
         name: null,
@@ -29,7 +36,10 @@ export function createManualTokenService({ trackedTokensRepository, metadataClie
   }
 
   async function registerManualToken({ chain, contractOrMint, symbol, name, decimals }) {
-    const normalized = normalizeContractOrMint(contractOrMint);
+    const normalized = normalizeAddressForChain({
+      family: chain.family,
+      address: contractOrMint
+    });
     if (!normalized) {
       throw new Error('contractOrMint is required.');
     }

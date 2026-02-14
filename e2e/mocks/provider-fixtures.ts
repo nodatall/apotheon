@@ -1,4 +1,4 @@
-import { Page, Route } from '@playwright/test';
+import { Page, Request, Route } from '@playwright/test';
 
 type Chain = {
   id: string;
@@ -32,6 +32,14 @@ type Protocol = {
   validationStatus: string;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseChainFamily(value: unknown): Chain['family'] {
+  return value === 'solana' ? 'solana' : 'evm';
+}
+
 function ok(route: Route, data: unknown, status = 200) {
   return route.fulfill({
     status,
@@ -46,6 +54,15 @@ function fail(route: Route, error: string, status = 400) {
     contentType: 'application/json',
     body: JSON.stringify({ error })
   });
+}
+
+function parseRequestBody(request: Request): Record<string, unknown> {
+  try {
+    const parsed = request.postDataJSON?.();
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 export async function registerDeterministicApiMocks(page: Page) {
@@ -68,7 +85,7 @@ export async function registerDeterministicApiMocks(page: Page) {
       return;
     }
 
-    const body = method === 'POST' || method === 'PATCH' ? request.postDataJSON?.() ?? {} : {};
+    const body = method === 'POST' || method === 'PATCH' ? parseRequestBody(request) : {};
 
     if (method === 'GET' && path === '/api/chains') {
       return ok(route, chains);
@@ -77,9 +94,9 @@ export async function registerDeterministicApiMocks(page: Page) {
     if (method === 'POST' && path === '/api/chains') {
       const next: Chain = {
         id: `chain-${chains.length + 1}`,
-        name: body.name,
-        slug: body.slug,
-        family: body.family
+        name: String(body.name ?? ''),
+        slug: String(body.slug ?? ''),
+        family: parseChainFamily(body.family)
       };
       chains.push(next);
       return ok(route, {
@@ -95,9 +112,9 @@ export async function registerDeterministicApiMocks(page: Page) {
     if (method === 'POST' && path === '/api/wallets') {
       const next: Wallet = {
         id: `wallet-${wallets.length + 1}`,
-        chainId: body.chainId,
-        address: body.address,
-        label: body.label || ''
+        chainId: String(body.chainId ?? ''),
+        address: String(body.address ?? ''),
+        label: String(body.label ?? '')
       };
       wallets.push(next);
       return ok(route, {
@@ -129,10 +146,10 @@ export async function registerDeterministicApiMocks(page: Page) {
     if (method === 'POST' && path === '/api/assets/tokens') {
       const next: Token = {
         id: `token-${tokens.length + 1}`,
-        chainId: body.chainId,
-        contractOrMint: body.contractOrMint,
-        symbol: body.symbol || 'TOK',
-        name: body.name || 'Token',
+        chainId: String(body.chainId ?? ''),
+        contractOrMint: String(body.contractOrMint ?? ''),
+        symbol: String(body.symbol ?? 'TOK'),
+        name: String(body.name ?? 'Token'),
         trackingSource: 'manual'
       };
       const existingIndex = tokens.findIndex(
@@ -151,16 +168,18 @@ export async function registerDeterministicApiMocks(page: Page) {
     }
 
     if (method === 'POST' && path === '/api/protocols/contracts') {
-      if (!body.abiMapping?.positionRead?.function) {
+      const abiMapping = isRecord(body.abiMapping) ? body.abiMapping : null;
+      const positionRead = isRecord(abiMapping?.positionRead) ? abiMapping.positionRead : null;
+      if (!positionRead?.function) {
         return fail(route, 'invalid abi mapping');
       }
 
       const next: Protocol = {
         id: `protocol-${protocols.length + 1}`,
-        chainId: body.chainId,
-        contractAddress: body.contractAddress,
-        label: body.label,
-        category: body.category,
+        chainId: String(body.chainId ?? ''),
+        contractAddress: String(body.contractAddress ?? ''),
+        label: String(body.label ?? ''),
+        category: String(body.category ?? ''),
         validationStatus: 'valid'
       };
       protocols.push(next);

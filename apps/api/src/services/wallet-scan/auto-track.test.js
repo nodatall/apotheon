@@ -45,7 +45,7 @@ test('auto-track: only positive balances become auto-tracked', async () => {
   const result = await service.runScan({ walletId: 'wallet-1' });
 
   assert.equal(result.autoTrackedCount, 1);
-  assert.deepEqual(trackedContracts, ['0xA']);
-  assert.equal(upsertedItems.find((item) => item.contractOrMint === '0xA').autoTrackedFlag, true);
-  assert.equal(upsertedItems.find((item) => item.contractOrMint === '0xB').autoTrackedFlag, false);
+  assert.deepEqual(trackedContracts, ['0xa']);
+  assert.equal(upsertedItems.find((item) => item.contractOrMint === '0xa').autoTrackedFlag, true);
+  assert.equal(upsertedItems.find((item) => item.contractOrMint === '0xb').autoTrackedFlag, false);
 });

@@ -13,7 +13,13 @@ export function createValuationService({
 } = {}) {
   async function fetchPricesWithFallback({ chain, contracts }) {
     const prices = new Map();
-    const uniqueContracts = [...new Set(contracts.map((contract) => String(contract).toLowerCase()))];
+    const uniqueContracts = [
+      ...new Set(
+        contracts
+          .map((contract) => String(contract || '').trim().toLowerCase())
+          .filter((contract) => contract.length > 0)
+      )
+    ];
 
     for (const group of chunk(uniqueContracts, batchSize)) {
       let primary = {};
@@ -21,6 +27,7 @@ export function createValuationService({
         primary = await coingeckoClient.getPricesByContracts({ chain, contracts: group });
       }
 
+      const missingContracts = [];
       for (const contract of group) {
         const primaryValue = primary?.[contract] ?? primary?.[contract.toLowerCase()] ?? null;
         if (typeof primaryValue === 'number') {
@@ -28,10 +35,22 @@ export function createValuationService({
           continue;
         }
 
-        if (dexFallbackClient?.getPriceByContract) {
-          const fallbackValue = await dexFallbackClient.getPriceByContract({ chain, contract });
-          if (typeof fallbackValue === 'number') {
-            prices.set(contract, fallbackValue);
+        missingContracts.push(contract);
+      }
+
+      if (dexFallbackClient?.getPriceByContract && missingContracts.length > 0) {
+        const fallbackRows = await Promise.all(
+          missingContracts.map(async (contract) => ({
+            contract,
+            price: await dexFallbackClient
+              .getPriceByContract({ chain, contract })
+              .catch(() => null)
+          }))
+        );
+
+        for (const fallback of fallbackRows) {
+          if (typeof fallback.price === 'number') {
+            prices.set(fallback.contract, fallback.price);
           }
         }
       }

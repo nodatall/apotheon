@@ -52,3 +52,39 @@ test('protocols: protocol contracts persist with validation status', async () =>
   assert.equal(result.validationStatus, 'valid');
   assert.equal(queries.length > 0, true);
 });
+
+test('protocols: invalid abi mappings are rejected before persistence', async () => {
+  let insertAttempted = false;
+
+  const service = createProtocolContractService({
+    pool: {
+      query: async (sql) => {
+        if (sql.includes('INSERT INTO protocol_contracts')) {
+          insertAttempted = true;
+        }
+        return { rows: [] };
+      }
+    },
+    previewExecutor: async () => ({ ok: false, error: 'preview failed' })
+  });
+
+  await assert.rejects(
+    () =>
+      service.createProtocolContract({
+        chainId: 'chain-1',
+        contractAddress: '0x123',
+        label: 'Broken',
+        category: 'staking',
+        abiMapping: {
+          positionRead: {
+            function: 'balanceOf',
+            args: ['$walletAddress'],
+            returns: 'uint256'
+          }
+        }
+      }),
+    /preview failed/i
+  );
+
+  assert.equal(insertAttempted, false);
+});

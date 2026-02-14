@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { isWalletUniqueViolation } from '../db/repositories/wallets.repository.js';
+import { normalizeAddressForChain } from '../services/shared/address-normalization.js';
 
 function isEvmAddress(address) {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
@@ -42,10 +43,10 @@ export function createWalletsRouter({
 
   router.post('/', async (req, res, next) => {
     const chainId = typeof req.body?.chainId === 'string' ? req.body.chainId.trim() : '';
-    const address = typeof req.body?.address === 'string' ? req.body.address.trim() : '';
+    const rawAddress = typeof req.body?.address === 'string' ? req.body.address.trim() : '';
     const label = typeof req.body?.label === 'string' ? req.body.label.trim() : null;
 
-    if (!chainId || !address) {
+    if (!chainId || !rawAddress) {
       res.status(400).json({ error: 'chainId and address are required.' });
       return;
     }
@@ -57,24 +58,37 @@ export function createWalletsRouter({
         return;
       }
 
-      if (!validateAddressForChain(chain.family, address)) {
+      if (!validateAddressForChain(chain.family, rawAddress)) {
         res.status(400).json({ error: `Address format is invalid for chain family ${chain.family}.` });
         return;
       }
 
+      const normalizedAddress = normalizeAddressForChain({
+        family: chain.family,
+        address: rawAddress
+      });
+
       const wallet = await walletsRepository.createWallet({
         chainId,
-        address,
+        address: normalizedAddress,
         label
       });
 
-      const scan = await walletScanService.runScan({ walletId: wallet.id });
+      let scan = null;
+      let scanError = null;
+      try {
+        scan = await walletScanService.runScan({ walletId: wallet.id });
+      } catch (error) {
+        scanError = error instanceof Error ? error.message : String(error);
+      }
 
       res.status(201).json({
         data: {
           ...wallet,
-          walletUniverseScanId: scan.scanRun.id,
-          universeSnapshotId: scan.universeSnapshotId
+          walletUniverseScanId: scan?.scanRun?.id ?? null,
+          universeSnapshotId: scan?.universeSnapshotId ?? null,
+          scanStatus: scan?.scanRun?.status ?? 'failed',
+          scanError
         }
       });
     } catch (error) {
@@ -100,6 +114,10 @@ export function createWalletsRouter({
     } catch (error) {
       if (error instanceof Error && /Wallet not found/.test(error.message)) {
         res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error instanceof Error && /No scan-eligible universe snapshot/.test(error.message)) {
+        res.status(409).json({ error: error.message });
         return;
       }
       next(error);

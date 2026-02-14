@@ -22,16 +22,7 @@ function mapProtocolRow(row) {
 
 export function createProtocolContractService({ pool, previewExecutor = async () => ({ ok: true }) }) {
   async function createProtocolContract({ chainId, contractAddress, label, category, abiMapping }) {
-    let validationStatus = 'draft';
-    let validationError = null;
-
-    try {
-      await validateAbiMappingWithPreview({ abiMapping, previewExecutor });
-      validationStatus = 'valid';
-    } catch (error) {
-      validationStatus = 'invalid';
-      validationError = error instanceof Error ? error.message : String(error);
-    }
+    await validateAbiMappingWithPreview({ abiMapping, previewExecutor });
 
     const { rows } = await pool.query(
       `
@@ -49,9 +40,9 @@ export function createProtocolContractService({ pool, previewExecutor = async ()
         label,
         category,
         abiMapping,
-        validationStatus,
-        validationError,
-        validationStatus === 'valid'
+        'valid',
+        null,
+        true
       ]
     );
 

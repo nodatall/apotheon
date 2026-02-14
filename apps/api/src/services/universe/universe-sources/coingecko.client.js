@@ -31,11 +31,29 @@ function normalizeAddress(address) {
   return trimmed;
 }
 
+async function mapWithConcurrency(items, mapper, concurrency) {
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const output = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      output[index] = await mapper(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return output;
+}
+
 export function createCoinGeckoClient({
   fetchImpl = fetch,
   apiKey = process.env.COINGECKO_API_KEY || '',
   baseUrl = DEFAULT_COINGECKO_BASE_URL,
-  timeoutMs = 15000
+  timeoutMs = 15000,
+  platformFetchConcurrency = 8
 } = {}) {
   if (!apiKey || apiKey.trim().length === 0) {
     throw new Error('CoinGecko API key is required.');
@@ -100,25 +118,31 @@ export function createCoinGeckoClient({
       throw new Error('CoinGecko markets response returned zero rows.');
     }
 
+    const candidateMarkets = markets.filter((market) => Boolean(market?.id));
+    const coins = await mapWithConcurrency(
+      candidateMarkets,
+      async (market) => fetchCoinPlatforms(market.id),
+      platformFetchConcurrency
+    );
+
     const tokens = [];
-    for (const market of markets) {
+    for (let index = 0; index < candidateMarkets.length; index += 1) {
       if (tokens.length >= limit) {
         break;
       }
 
-      if (!market?.id) {
-        continue;
-      }
-
-      const coin = await fetchCoinPlatforms(market.id);
+      const market = candidateMarkets[index];
+      const coin = coins[index];
       const contractOrMint = normalizeAddress(coin?.platforms?.[platform]);
       if (!contractOrMint) {
         continue;
       }
+      const normalizedContractOrMint =
+        chain.family === 'evm' ? contractOrMint.toLowerCase() : contractOrMint;
 
       tokens.push({
         rank: tokens.length + 1,
-        contractOrMint,
+        contractOrMint: normalizedContractOrMint,
         symbol: typeof market.symbol === 'string' ? market.symbol.toUpperCase() : null,
         name: typeof market.name === 'string' ? market.name : null,
         decimals: null,

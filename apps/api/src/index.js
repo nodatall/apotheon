@@ -27,7 +27,9 @@ import { createDailySnapshotService } from './services/snapshots/daily-snapshot.
 import { createManualTokenService } from './services/tokens/manual-token.service.js';
 import { createValuationService } from './services/valuation/valuation.service.js';
 import { createBalanceBatcher } from './services/wallet-scan/balance-batcher.js';
+import { createEvmBalanceResolver } from './services/wallet-scan/evm-balance-resolver.js';
 import { createWalletScanService } from './services/wallet-scan/wallet-scan.service.js';
+import { createScheduler } from './jobs/scheduler.js';
 
 dotenv.config();
 
@@ -77,7 +79,9 @@ export function createApp({
       tokenUniverseRepository: resolvedTokenUniverseRepository,
       scansRepository: resolvedScansRepository,
       trackedTokensRepository: resolvedTrackedTokensRepository,
-      balanceBatcher: createBalanceBatcher()
+      balanceBatcher: createBalanceBatcher({
+        evmResolver: createEvmBalanceResolver()
+      })
     });
   const manualTokenService = createManualTokenService({
     trackedTokensRepository: resolvedTrackedTokensRepository
@@ -155,7 +159,9 @@ export function createApp({
 
   return {
     app,
-    chainsRepository: resolvedChainsRepository
+    chainsRepository: resolvedChainsRepository,
+    universeRefreshService: resolvedUniverseRefreshService,
+    dailySnapshotService
   };
 }
 
@@ -169,12 +175,33 @@ async function seedBuiltInChains(chainsRepository) {
 
 async function start() {
   const runtimeEnv = loadRuntimeEnv();
-  const { app, chainsRepository } = createApp({ runtimeEnv });
+  const { app, chainsRepository, universeRefreshService, dailySnapshotService } = createApp({
+    runtimeEnv
+  });
   await seedBuiltInChains(chainsRepository);
 
-  app.listen(runtimeEnv.port, () => {
+  const server = app.listen(runtimeEnv.port, () => {
     console.log(`API listening on http://localhost:${runtimeEnv.port}`);
   });
+
+  const scheduler = createScheduler({
+    universeRefreshService,
+    dailySnapshotService
+  });
+
+  scheduler.runDailyJobs().catch((error) => {
+    console.error('Initial scheduler run failed:', error);
+  });
+
+  const intervalMs = Number(process.env.SCHEDULER_INTERVAL_MS || 60_000);
+  const timer = setInterval(() => {
+    scheduler.runDailyJobs().catch((error) => {
+      console.error('Scheduled job run failed:', error);
+    });
+  }, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 60_000);
+  timer.unref?.();
+
+  return server;
 }
 
 if (process.env.NODE_ENV !== 'test') {

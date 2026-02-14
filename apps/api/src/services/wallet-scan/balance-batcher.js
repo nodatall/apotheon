@@ -6,6 +6,13 @@ function chunk(items, size) {
   return chunks;
 }
 
+export class BalanceResolverNotConfiguredError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'BalanceResolverNotConfiguredError';
+  }
+}
+
 function normalizeBalances(tokens, rawResults = []) {
   const byContract = new Map(
     rawResults.map((item) => [String(item.contractOrMint).toLowerCase(), item])
@@ -25,13 +32,19 @@ function normalizeBalances(tokens, rawResults = []) {
 
 export function createBalanceBatcher({
   chunkSize = 50,
-  evmResolver = async ({ tokens }) => tokens.map((token) => ({ contractOrMint: token.contractOrMint, balanceRaw: '0', balanceNormalized: 0 })),
-  solanaResolver = async ({ tokens }) => tokens.map((token) => ({ contractOrMint: token.contractOrMint, balanceRaw: '0', balanceNormalized: 0 }))
+  evmResolver = null,
+  solanaResolver = null
 } = {}) {
   async function resolveBalances({ chain, walletAddress, tokens }) {
     const resolver = chain.family === 'solana' ? solanaResolver : evmResolver;
+    if (typeof resolver !== 'function') {
+      throw new BalanceResolverNotConfiguredError(
+        `No ${chain.family} balance resolver configured for wallet scan.`
+      );
+    }
+    const safeChunkSize = Number.isInteger(chunkSize) && chunkSize > 0 ? chunkSize : 50;
 
-    const grouped = chunk(tokens, chunkSize);
+    const grouped = chunk(tokens, safeChunkSize);
     const outputs = [];
 
     for (const tokenChunk of grouped) {
