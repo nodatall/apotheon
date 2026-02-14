@@ -1,3 +1,2 @@
--- Scaffold placeholder migration.
--- Intentionally no product schema yet.
--- Schema design will be finalized during planning/PRD.
+-- Baseline migration kept intentionally empty.
+-- Product schema starts in 0001_core_schema.sql.

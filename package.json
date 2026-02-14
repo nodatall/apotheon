@@ -13,9 +13,12 @@
     "dev:web": "npm run dev --workspace @apotheon/web",
     "build": "npm run build --workspace @apotheon/api && npm run build --workspace @apotheon/web",
     "start": "npm run start --workspace @apotheon/api",
-    "lint": "npm run lint --workspace @apotheon/api && npm run lint --workspace @apotheon/web"
+    "lint": "npm run lint --workspace @apotheon/api && npm run lint --workspace @apotheon/web",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts --grep-invert @live",
+    "test:e2e:live": "playwright test --config e2e/playwright.config.ts --grep @live"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "concurrently": "^9.1.2"
   },
   "engines": {
