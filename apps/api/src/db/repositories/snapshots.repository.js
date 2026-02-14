@@ -29,6 +29,10 @@ function mapSnapshotItem(row) {
   };
 }
 
+function toNumberOrNull(value) {
+  return value === null ? null : Number(value);
+}
+
 export function createSnapshotsRepository({ pool }) {
   async function upsertDailySnapshot({
     snapshotDateUtc,
@@ -168,9 +172,115 @@ export function createSnapshotsRepository({ pool }) {
     }));
   }
 
+  async function getLatestDashboardPayload() {
+    const latestSnapshot = await getLatestDailySnapshot();
+    if (!latestSnapshot) {
+      return {
+        latestSnapshot: null,
+        totals: {
+          portfolioUsdValue: 0,
+          tokenUsdValue: 0,
+          protocolUsdValue: 0
+        },
+        rows: {
+          tokens: [],
+          protocols: []
+        }
+      };
+    }
+
+    const { rows } = await pool.query(
+      `
+        SELECT
+          si.id AS snapshot_item_id,
+          si.wallet_id,
+          si.asset_type,
+          si.asset_ref_id,
+          si.symbol,
+          si.quantity,
+          si.usd_price,
+          si.usd_value,
+          si.valuation_status,
+          pc.label AS protocol_label,
+          pc.category AS protocol_category
+        FROM snapshot_items si
+        LEFT JOIN protocol_contracts pc
+          ON si.asset_type = 'protocol_position'
+          AND si.asset_ref_id = pc.id
+        WHERE si.snapshot_id = $1
+        ORDER BY
+          si.usd_value DESC NULLS LAST,
+          si.symbol ASC NULLS LAST
+      `,
+      [latestSnapshot.id]
+    );
+
+    let portfolioUsdValue = 0;
+    let tokenUsdValue = 0;
+    let protocolUsdValue = 0;
+    const tokens = [];
+    const protocols = [];
+
+    for (const row of rows) {
+      const usdValue = toNumberOrNull(row.usd_value);
+      const usdPrice = toNumberOrNull(row.usd_price);
+      const quantity = Number(row.quantity);
+      const numericValue = usdValue ?? 0;
+      portfolioUsdValue += numericValue;
+
+      if (row.asset_type === 'protocol_position') {
+        protocolUsdValue += numericValue;
+        protocols.push({
+          snapshotItemId: row.snapshot_item_id,
+          walletId: row.wallet_id,
+          assetRefId: row.asset_ref_id,
+          symbol: row.symbol,
+          protocolLabel: row.protocol_label,
+          protocolCategory: row.protocol_category,
+          quantity,
+          usdPrice,
+          usdValue,
+          valuationStatus: row.valuation_status
+        });
+      } else {
+        tokenUsdValue += numericValue;
+        tokens.push({
+          snapshotItemId: row.snapshot_item_id,
+          walletId: row.wallet_id,
+          assetRefId: row.asset_ref_id,
+          symbol: row.symbol,
+          quantity,
+          usdPrice,
+          usdValue,
+          valuationStatus: row.valuation_status
+        });
+      }
+    }
+
+    return {
+      latestSnapshot: {
+        id: latestSnapshot.id,
+        snapshotDateUtc: latestSnapshot.snapshotDateUtc,
+        status: latestSnapshot.status,
+        finishedAt: latestSnapshot.finishedAt,
+        errorMessage: latestSnapshot.errorMessage
+      },
+      totals: {
+        portfolioUsdValue,
+        tokenUsdValue,
+        protocolUsdValue
+      },
+      rows: {
+        tokens,
+        protocols
+      }
+    };
+  }
+
   return {
     getDailySnapshotByDate,
     getHistory,
+    getLatestDashboardPayload,
     getLatestDailySnapshot,
     getSnapshotItems,
     listDailySnapshots,

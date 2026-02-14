@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createUniverseRefreshService } from './universe-refresh.service.js';
 
-test('refreshChain persists ranked birdeye snapshot with source birdeye', async () => {
+test('refreshChain persists ranked birdeye snapshot when birdeye is configured', async () => {
   const persisted = {
     snapshot: null,
     items: null
@@ -16,7 +16,7 @@ test('refreshChain persists ranked birdeye snapshot with source birdeye', async 
       upsertSnapshot: async (input) => {
         persisted.snapshot = input;
         return {
-          id: '81ed4ec1-d1de-4ddf-87cb-27340ec19439',
+          id: 'snapshot-1',
           ...input
         };
       },
@@ -26,16 +26,13 @@ test('refreshChain persists ranked birdeye snapshot with source birdeye', async 
     },
     birdeyeClient: {
       fetchTopTokens: async () => [
-        {
-          contractOrMint: '0xaaa',
-          symbol: 'AAA',
-          marketCapUsd: 100
-        },
-        {
-          contractOrMint: '0xbbb',
-          symbol: 'BBB',
-          marketCapUsd: 50
-        }
+        { contractOrMint: '0xaaa', symbol: 'AAA', marketCapUsd: 100 },
+        { contractOrMint: '0xbbb', symbol: 'BBB', marketCapUsd: 50 }
+      ]
+    },
+    coingeckoClient: {
+      fetchTopTokens: async () => [
+        { contractOrMint: '0xccc', symbol: 'CCC', marketCapUsd: 10 }
       ]
     },
     targetSize: 2
@@ -43,7 +40,7 @@ test('refreshChain persists ranked birdeye snapshot with source birdeye', async 
 
   const result = await service.refreshChain({
     chain: {
-      id: '7bdc95fe-7d4d-4e4c-99e1-8970222af223',
+      id: 'chain-1',
       slug: 'ethereum',
       family: 'evm',
       isActive: true
@@ -59,7 +56,45 @@ test('refreshChain persists ranked birdeye snapshot with source birdeye', async 
   assert.equal(persisted.items[1].rank, 2);
 });
 
-test('refreshAllChains skips inactive chains and stores failed snapshots', async () => {
+test('refreshChain skips birdeye and uses coingecko when birdeye is absent', async () => {
+  const persisted = [];
+
+  const service = createUniverseRefreshService({
+    chainsRepository: {
+      listChains: async () => []
+    },
+    tokenUniverseRepository: {
+      upsertSnapshot: async (input) => {
+        persisted.push(input);
+        return {
+          id: 'snapshot-1',
+          ...input
+        };
+      },
+      replaceSnapshotItems: async () => {}
+    },
+    coingeckoClient: {
+      fetchTopTokens: async () => [{ contractOrMint: '0xabc', symbol: 'ABC' }]
+    },
+    targetSize: 200
+  });
+
+  const outcome = await service.refreshChain({
+    chain: {
+      id: 'chain-1',
+      slug: 'arbitrum',
+      family: 'evm',
+      isActive: true
+    },
+    asOfDateUtc: '2026-02-13'
+  });
+
+  assert.equal(outcome.source, 'coingecko_fallback');
+  assert.equal(outcome.status, 'partial');
+  assert.equal(persisted[0].source, 'coingecko_fallback');
+});
+
+test('refreshAllChains stores failed snapshot when coingecko path fails', async () => {
   const upsertCalls = [];
 
   const service = createUniverseRefreshService({
@@ -83,7 +118,7 @@ test('refreshAllChains skips inactive chains and stores failed snapshots', async
       }),
       replaceSnapshotItems: async () => {}
     },
-    birdeyeClient: {
+    coingeckoClient: {
       fetchTopTokens: async () => {
         throw new Error('provider timeout');
       }
@@ -97,5 +132,5 @@ test('refreshAllChains skips inactive chains and stores failed snapshots', async
   assert.equal(outcomes[0].chainId, 'active-1');
   assert.equal(upsertCalls.length, 1);
   assert.equal(upsertCalls[0].status, 'failed');
-  assert.equal(upsertCalls[0].source, 'birdeye');
+  assert.equal(upsertCalls[0].source, 'coingecko_fallback');
 });

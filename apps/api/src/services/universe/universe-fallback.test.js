@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createUniverseRefreshService } from './universe-refresh.service.js';
 import { createCoinGeckoClient } from './universe-sources/coingecko.client.js';
+import { EnvConfigError, loadRuntimeEnv } from '../../config/env.js';
 
 test('CoinGecko client derives ordered per-chain universe using markets + platform mapping', async () => {
   const calls = [];
@@ -108,4 +109,49 @@ test('refreshChain uses coingecko fallback when birdeye fails', async () => {
   assert.equal(outcome.source, 'coingecko_fallback');
   assert.equal(writtenSnapshots[0].source, 'coingecko_fallback');
   assert.equal(outcome.status, 'partial');
+});
+
+test('CoinGecko client uses demo api-key header for demo key mode', async () => {
+  const seenHeaders = [];
+  const client = createCoinGeckoClient({
+    apiKey: 'demo-key',
+    keyMode: 'demo',
+    baseUrl: 'https://api.coingecko.com/api/v3',
+    fetchImpl: async (_url, init) => {
+      seenHeaders.push(init?.headers ?? {});
+      if (String(_url).includes('/coins/markets')) {
+        return {
+          ok: true,
+          json: async () => [{ id: 'coin-a', symbol: 'aaa', name: 'Coin A', market_cap: 1 }]
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ platforms: { ethereum: '0xaaa' } })
+      };
+    }
+  });
+
+  const tokens = await client.fetchTopTokens({
+    chain: { slug: 'ethereum', family: 'evm' },
+    limit: 1
+  });
+
+  assert.equal(tokens.length, 1);
+  assert.ok(seenHeaders.every((headers) => 'x-cg-demo-api-key' in headers));
+});
+
+test('runtime env reports incompatible CoinGecko base URL and key mode', () => {
+  assert.throws(
+    () =>
+      loadRuntimeEnv({
+        PORT: '4000',
+        COINGECKO_API_KEY: 'test-key',
+        COINGECKO_BASE_URL: 'https://pro-api.coingecko.com/api/v3',
+        COINGECKO_KEY_MODE: 'demo'
+      }),
+    (error) =>
+      error instanceof EnvConfigError &&
+      /incompatible with pro-api\.coingecko\.com/i.test(error.message)
+  );
 });

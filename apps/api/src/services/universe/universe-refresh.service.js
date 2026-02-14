@@ -22,10 +22,14 @@ function isScanEligible(status) {
 export function createUniverseRefreshService({
   chainsRepository,
   tokenUniverseRepository,
-  birdeyeClient,
-  coingeckoClient = null,
+  birdeyeClient = null,
+  coingeckoClient,
   targetSize = 200
 }) {
+  if (!coingeckoClient?.fetchTopTokens) {
+    throw new Error('CoinGecko client is required for universe refresh.');
+  }
+
   async function persistSnapshot({
     chain,
     asOfDateUtc,
@@ -63,10 +67,37 @@ export function createUniverseRefreshService({
       itemCount: snapshot.itemCount,
       errorMessage: snapshot.errorMessage,
       activeSnapshotId: activeSnapshot?.id ?? null
-    };
+      };
+  }
+
+  async function refreshWithCoinGecko({ chain, asOfDateUtc }) {
+    const tokens = await coingeckoClient.fetchTopTokens({
+      chain,
+      limit: targetSize
+    });
+    const rankedItems = toRankedItems(tokens);
+    return persistSnapshot({
+      chain,
+      asOfDateUtc,
+      source: 'coingecko_fallback',
+      rankedItems
+    });
   }
 
   async function refreshChain({ chain, asOfDateUtc }) {
+    if (!birdeyeClient?.fetchTopTokens) {
+      try {
+        return refreshWithCoinGecko({
+          chain,
+          asOfDateUtc
+        });
+      } catch (coingeckoError) {
+        const message =
+          coingeckoError instanceof Error ? coingeckoError.message : 'unknown coingecko error';
+        throw new Error(`Universe refresh failed. coingecko=${message}`);
+      }
+    }
+
     try {
       const tokens = await birdeyeClient.fetchTopTokens({ chain, limit: targetSize });
       const rankedItems = toRankedItems(tokens);
@@ -78,28 +109,16 @@ export function createUniverseRefreshService({
         rankedItems
       });
     } catch (birdeyeError) {
-      if (!coingeckoClient) {
-        throw birdeyeError;
-      }
-
       try {
-        const fallbackTokens = await coingeckoClient.fetchTopTokens({
+        return refreshWithCoinGecko({
           chain,
-          limit: targetSize
+          asOfDateUtc
         });
-        const rankedItems = toRankedItems(fallbackTokens);
-
-        return persistSnapshot({
-          chain,
-          asOfDateUtc,
-          source: 'coingecko_fallback',
-          rankedItems
-        });
-      } catch (fallbackError) {
+      } catch (coingeckoError) {
         const birdeyeMessage =
           birdeyeError instanceof Error ? birdeyeError.message : 'unknown birdeye error';
         const fallbackMessage =
-          fallbackError instanceof Error ? fallbackError.message : 'unknown fallback error';
+          coingeckoError instanceof Error ? coingeckoError.message : 'unknown coingecko error';
 
         throw new Error(
           `Universe refresh failed. birdeye=${birdeyeMessage}; coingecko=${fallbackMessage}`
@@ -129,7 +148,7 @@ export function createUniverseRefreshService({
     return persistSnapshot({
       chain,
       asOfDateUtc,
-      source: existingSameDate?.source ?? 'birdeye',
+      source: existingSameDate?.source ?? 'coingecko_fallback',
       rankedItems: [],
       errorMessage
     });

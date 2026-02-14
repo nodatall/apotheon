@@ -15,6 +15,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run test --workspace @apotheon/api
       - run: npm run build --workspace @apotheon/web
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test --config e2e/playwright.config.ts --grep-invert @live
+      - run: npx playwright test --config e2e/playwright.config.ts

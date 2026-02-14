@@ -36,7 +36,13 @@ export function createBirdeyeClient({
   baseUrl = DEFAULT_BIRDEYE_BASE_URL,
   timeoutMs = 10000
 } = {}) {
+  const resolvedApiKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+
   async function fetchTopTokens({ chain, limit = 200 }) {
+    if (!resolvedApiKey) {
+      throw new Error('Birdeye API key is not configured.');
+    }
+
     const chainCode = resolveBirdeyeChainCode(chain);
     if (!chainCode) {
       throw new Error(`Birdeye does not support chain slug "${chain.slug}".`);
@@ -57,7 +63,7 @@ export function createBirdeyeClient({
         method: 'GET',
         headers: {
           accept: 'application/json',
-          ...(apiKey ? { 'X-API-KEY': apiKey } : {})
+          'X-API-KEY': resolvedApiKey
         },
         signal: controller.signal
       });

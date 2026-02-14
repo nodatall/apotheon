@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './specs',
   fullyParallel: true,
+  grepInvert: process.env.PLAYWRIGHT_INCLUDE_LIVE === 'true' ? undefined : /@live/,
   retries: process.env.CI ? 1 : 0,
   timeout: 45_000,
   use: {

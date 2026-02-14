@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import { JobStatusPanel } from '../components/JobStatusPanel.jsx';
 
+function formatScanStatus(status) {
+  return status || 'not_started';
+}
+
 export default function Settings() {
   const [chains, setChains] = useState([]);
   const [wallets, setWallets] = useState([]);
@@ -19,11 +23,13 @@ export default function Settings() {
   const [universeStatus, setUniverseStatus] = useState(null);
   const [walletStatus, setWalletStatus] = useState(null);
   const [snapshotStatus, setSnapshotStatus] = useState(null);
+  const [walletOutcome, setWalletOutcome] = useState(null);
 
   const selectedChain = useMemo(
     () => chains.find((chain) => chain.id === selectedChainId) || null,
     [chains, selectedChainId]
   );
+  const recentWallets = useMemo(() => wallets.slice(0, 5), [wallets]);
 
   async function refresh() {
     const [chainRows, walletRows, snapshotJob] = await Promise.all([
@@ -34,6 +40,30 @@ export default function Settings() {
     setChains(chainRows || []);
     setWallets(walletRows || []);
     setSnapshotStatus(snapshotJob);
+  }
+
+  async function refreshWalletOutcome(walletId) {
+    if (!walletId) {
+      setWalletOutcome(null);
+      return;
+    }
+
+    const [status, onboarding] = await Promise.all([
+      api.getWalletJobStatus(walletId).catch(() => null),
+      api.getWalletOnboardingStatus(walletId).catch(() => null)
+    ]);
+
+    setWalletStatus(status);
+    if (onboarding) {
+      setWalletOutcome((prev) => ({
+        ...(prev || {}),
+        walletId: onboarding.walletId,
+        scanStatus: onboarding.scanStatus,
+        scanError: onboarding.scanError,
+        needsUniverseRefresh: onboarding.needsUniverseRefresh,
+        canRescan: onboarding.canRescan
+      }));
+    }
   }
 
   useEffect(() => {
@@ -58,10 +88,7 @@ export default function Settings() {
       return;
     }
 
-    api
-      .getWalletJobStatus(selectedWalletId)
-      .then((data) => setWalletStatus(data))
-      .catch((loadError) => setError(loadError.message));
+    refreshWalletOutcome(selectedWalletId).catch((loadError) => setError(loadError.message));
   }, [selectedWalletId]);
 
   async function submitChain(event) {
@@ -88,9 +115,22 @@ export default function Settings() {
     setError('');
 
     try {
-      await api.createWallet(newWallet);
+      const createdWallet = await api.createWallet(newWallet);
       setNewWallet({ chainId: newWallet.chainId, address: '', label: '' });
+      setSelectedWalletId(createdWallet.id);
+      setSelectedChainId(createdWallet.chainId);
+      setWalletOutcome({
+        walletId: createdWallet.id,
+        chainId: createdWallet.chainId,
+        address: createdWallet.address,
+        label: createdWallet.label || null,
+        scanStatus: createdWallet.scanStatus,
+        scanError: createdWallet.scanError,
+        needsUniverseRefresh: createdWallet.needsUniverseRefresh,
+        canRescan: createdWallet.canRescan
+      });
       await refresh();
+      await refreshWalletOutcome(createdWallet.id);
     } catch (submitError) {
       setError(submitError.message);
     }
@@ -130,8 +170,7 @@ export default function Settings() {
     setError('');
     try {
       await api.rescanWallet(selectedWalletId);
-      const status = await api.getWalletJobStatus(selectedWalletId);
-      setWalletStatus(status);
+      await refreshWalletOutcome(selectedWalletId);
     } catch (runError) {
       setError(runError.message);
     }
@@ -152,6 +191,13 @@ export default function Settings() {
           </button>
           <button type="button" onClick={rescanSelectedWallet} disabled={!selectedWalletId}>
             Re-Scan Selected Wallet
+          </button>
+          <button
+            type="button"
+            onClick={() => refreshWalletOutcome(selectedWalletId)}
+            disabled={!selectedWalletId}
+          >
+            Refresh Onboarding Status
           </button>
         </div>
 
@@ -262,6 +308,59 @@ export default function Settings() {
         </form>
       </section>
 
+      <section className="card hero">
+        <h3>Wallet Onboarding Outcome</h3>
+        {!walletOutcome ? (
+          <p className="muted">Add or select a wallet to view onboarding status.</p>
+        ) : (
+          <>
+            <p className={`pill pill-${formatScanStatus(walletOutcome.scanStatus)}`}>
+              scan: {formatScanStatus(walletOutcome.scanStatus)}
+            </p>
+            <p className="muted">
+              Wallet: {walletOutcome.address || walletOutcome.walletId || selectedWalletId || 'n/a'}
+            </p>
+            {walletOutcome.scanError ? <p className="error">{walletOutcome.scanError}</p> : null}
+            <div className="list-row">
+              <span className="pill">
+                needsUniverseRefresh: {walletOutcome.needsUniverseRefresh ? 'yes' : 'no'}
+              </span>
+              <span className="pill">canRescan: {walletOutcome.canRescan ? 'yes' : 'no'}</span>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="card hero">
+        <h3>Recent Wallets</h3>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Address</th>
+              <th>Chain</th>
+              <th>Label</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recentWallets.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="muted">
+                  No wallets yet.
+                </td>
+              </tr>
+            ) : (
+              recentWallets.map((wallet) => (
+                <tr key={wallet.id}>
+                  <td>{wallet.address}</td>
+                  <td>{chains.find((chain) => chain.id === wallet.chainId)?.name || wallet.chainId}</td>
+                  <td>{wallet.label || 'n/a'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </section>
+
       <JobStatusPanel
         title="Universe Job"
         status={universeStatus?.status}
@@ -272,6 +371,7 @@ export default function Settings() {
         title="Wallet Scan Job"
         status={walletStatus?.status}
         errorMessage={walletStatus?.errorMessage}
+        meta={{ walletId: selectedWalletId || null }}
       />
       <JobStatusPanel
         title="Snapshot Job"

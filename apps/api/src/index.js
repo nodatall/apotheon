@@ -61,14 +61,19 @@ export function createApp({
       allowUnsafeLocalRpc: runtimeEnv.allowUnsafeRpcUrls
     });
   const coingeckoClient = createCoinGeckoClient({
-    apiKey: runtimeEnv.coingeckoApiKey
+    apiKey: runtimeEnv.coingeckoApiKey,
+    baseUrl: runtimeEnv.coingeckoBaseUrl,
+    keyMode: runtimeEnv.coingeckoKeyMode
   });
+  const birdeyeClient = runtimeEnv.birdeyeApiKey
+    ? createBirdeyeClient({ apiKey: runtimeEnv.birdeyeApiKey })
+    : null;
   const resolvedUniverseRefreshService =
     universeRefreshService ??
     createUniverseRefreshService({
       chainsRepository: resolvedChainsRepository,
       tokenUniverseRepository: resolvedTokenUniverseRepository,
-      birdeyeClient: createBirdeyeClient(),
+      birdeyeClient,
       coingeckoClient
     });
   const resolvedWalletScanService =
@@ -93,7 +98,8 @@ export function createApp({
     walletsRepository: resolvedWalletsRepository,
     scansRepository: resolvedScansRepository,
     snapshotsRepository: resolvedSnapshotsRepository,
-    valuationService
+    valuationService,
+    protocolContractService
   });
 
   app.use(cors());
