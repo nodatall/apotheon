@@ -2,13 +2,48 @@ function todayUtcDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function resolveProtocolPositionResolver(protocolPositionResolver) {
+  if (typeof protocolPositionResolver === 'function') {
+    return protocolPositionResolver;
+  }
+  if (protocolPositionResolver && typeof protocolPositionResolver.resolvePosition === 'function') {
+    return protocolPositionResolver.resolvePosition.bind(protocolPositionResolver);
+  }
+  return async ({ protocol }) => {
+    throw new Error(
+      `Protocol position resolver is not configured for ${protocol?.id || 'unknown protocol'}.`
+    );
+  };
+}
+
+async function loadSnapshotEligibleProtocols({ protocolContractService, chainId }) {
+  if (!protocolContractService) {
+    return [];
+  }
+
+  if (typeof protocolContractService.listSnapshotEligibleContracts === 'function') {
+    return protocolContractService.listSnapshotEligibleContracts({ chainId });
+  }
+
+  if (typeof protocolContractService.listProtocolContracts === 'function') {
+    const all = await protocolContractService.listProtocolContracts({ chainId });
+    return all.filter((item) => item.isActive && item.validationStatus === 'valid');
+  }
+
+  return [];
+}
+
 export function createDailySnapshotService({
   chainsRepository,
   walletsRepository,
   scansRepository,
   snapshotsRepository,
-  valuationService
+  valuationService,
+  protocolContractService = null,
+  protocolPositionResolver = null
 }) {
+  const resolveProtocolPosition = resolveProtocolPositionResolver(protocolPositionResolver);
+
   async function runDailySnapshot({ snapshotDateUtc = todayUtcDate(), force = false } = {}) {
     const existing = await snapshotsRepository.getDailySnapshotByDate(snapshotDateUtc);
     if (existing && !force && (existing.status === 'success' || existing.status === 'partial')) {
@@ -29,6 +64,7 @@ export function createDailySnapshotService({
     try {
       const wallets = await walletsRepository.listWallets();
       let unknownCount = 0;
+      const protocolReadFailures = [];
 
       for (const wallet of wallets) {
         const chain = await chainsRepository.getChainById(wallet.chainId);
@@ -45,12 +81,15 @@ export function createDailySnapshotService({
           tokenId: item.tokenId
         }));
 
-        const valued = await valuationService.valuatePositions({
-          chain,
-          positions: tokenPositions
-        });
+        const valuedTokens =
+          tokenPositions.length === 0
+            ? []
+            : await valuationService.valuatePositions({
+                chain,
+                positions: tokenPositions
+              });
 
-        for (const position of valued) {
+        for (const position of valuedTokens) {
           if (position.valuationStatus === 'unknown') {
             unknownCount += 1;
           }
@@ -67,15 +106,72 @@ export function createDailySnapshotService({
             valuationStatus: position.valuationStatus
           });
         }
+
+        const protocols = await loadSnapshotEligibleProtocols({
+          protocolContractService,
+          chainId: wallet.chainId
+        });
+
+        for (const protocol of protocols) {
+          try {
+            const resolved = await resolveProtocolPosition({
+              chain,
+              wallet,
+              protocol
+            });
+
+            if (!resolved) {
+              continue;
+            }
+
+            const quantity = Number(resolved.quantity);
+            if (!Number.isFinite(quantity)) {
+              throw new Error(`Invalid protocol quantity for ${protocol.id}`);
+            }
+
+            const [valuedPosition] = await valuationService.valuatePositions({
+              chain,
+              positions: [
+                {
+                  contractOrMint: resolved.contractOrMint ?? protocol.contractAddress,
+                  quantity,
+                  symbol: resolved.symbol ?? protocol.label
+                }
+              ]
+            });
+
+            if (valuedPosition.valuationStatus === 'unknown') {
+              unknownCount += 1;
+            }
+
+            await snapshotsRepository.upsertSnapshotItem({
+              snapshotId: running.id,
+              walletId: wallet.id,
+              assetType: 'protocol_position',
+              assetRefId: protocol.id,
+              symbol: valuedPosition.symbol ?? protocol.label,
+              quantity: valuedPosition.quantity,
+              usdPrice: valuedPosition.usdPrice,
+              usdValue: valuedPosition.usdValue,
+              valuationStatus: valuedPosition.valuationStatus
+            });
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            protocolReadFailures.push(`${protocol.label || protocol.id}: ${reason}`);
+          }
+        }
       }
 
-      const status = unknownCount > 0 ? 'partial' : 'success';
+      const status = unknownCount > 0 || protocolReadFailures.length > 0 ? 'partial' : 'success';
       const completed = await snapshotsRepository.upsertDailySnapshot({
         snapshotDateUtc,
         status,
         startedAt: running.startedAt,
         finishedAt: new Date().toISOString(),
-        errorMessage: null
+        errorMessage:
+          protocolReadFailures.length > 0
+            ? `Protocol position read failures: ${protocolReadFailures.join(' | ')}`
+            : null
       });
 
       return {

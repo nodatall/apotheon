@@ -135,3 +135,71 @@ test('wallets: normalizes evm address casing before persistence', async () => {
   assert.equal(response.status, 201);
   assert.equal(savedAddress, '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
 });
+
+test('wallets: returns onboarding hints when initial scan fails', async () => {
+  const baseUrl = await startServer(
+    createWalletsRouter({
+      chainsRepository: {
+        getChainById: async () => ({ id: 'c1', family: 'evm' })
+      },
+      walletsRepository: {
+        createWallet: async ({ address }) => ({ id: 'wallet-1', chainId: 'c1', address })
+      },
+      scansRepository: {
+        getLatestScanByWallet: async () => null
+      },
+      walletScanService: {
+        runScan: async () => {
+          throw new Error('No scan-eligible universe snapshot for chain: c1');
+        }
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/wallets`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      chainId: 'c1',
+      address: '0x1234567890123456789012345678901234567890'
+    })
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(body.data.scanStatus, 'failed');
+  assert.match(body.data.scanError, /No scan-eligible universe snapshot/i);
+  assert.equal(body.data.needsUniverseRefresh, true);
+  assert.equal(body.data.canRescan, true);
+});
+
+test('wallets: onboarding-status returns latest scan state and hints', async () => {
+  const baseUrl = await startServer(
+    createWalletsRouter({
+      chainsRepository: {
+        getChainById: async () => ({ id: 'c1', family: 'evm' })
+      },
+      walletsRepository: {
+        getWalletById: async (id) => ({ id, chainId: 'c1', address: '0xabc' }),
+        createWallet: async () => ({})
+      },
+      scansRepository: {
+        getLatestScanByWallet: async () => ({
+          status: 'failed',
+          errorMessage: 'No scan-eligible universe snapshot for chain: c1'
+        })
+      },
+      walletScanService: {
+        runScan: async () => ({})
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/wallets/wallet-1/onboarding-status`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.walletId, 'wallet-1');
+  assert.equal(body.data.scanStatus, 'failed');
+  assert.equal(body.data.needsUniverseRefresh, true);
+  assert.equal(body.data.canRescan, true);
+});

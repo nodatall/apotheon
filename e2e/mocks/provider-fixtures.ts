@@ -12,6 +12,8 @@ type Wallet = {
   chainId: string;
   address: string;
   label: string;
+  scanStatus?: string;
+  scanError?: string | null;
 };
 
 type Token = {
@@ -114,13 +116,17 @@ export async function registerDeterministicApiMocks(page: Page) {
         id: `wallet-${wallets.length + 1}`,
         chainId: String(body.chainId ?? ''),
         address: String(body.address ?? ''),
-        label: String(body.label ?? '')
+        label: String(body.label ?? ''),
+        scanStatus: 'failed',
+        scanError: 'No scan-eligible universe snapshot for chain: chain-eth'
       };
       wallets.push(next);
       return ok(route, {
         ...next,
         walletUniverseScanId: `scan-${wallets.length}`,
-        universeSnapshotId: 'snapshot-1'
+        universeSnapshotId: 'snapshot-1',
+        needsUniverseRefresh: true,
+        canRescan: true
       }, 201);
     }
 
@@ -136,6 +142,18 @@ export async function registerDeterministicApiMocks(page: Page) {
       return ok(route, {
         status: 'success',
         errorMessage: null
+      });
+    }
+
+    if (method === 'GET' && path.startsWith('/api/wallets/') && path.endsWith('/onboarding-status')) {
+      const walletId = path.split('/')[3];
+      const wallet = wallets.find((entry) => entry.id === walletId);
+      return ok(route, {
+        walletId,
+        scanStatus: wallet?.scanStatus || 'failed',
+        scanError: wallet?.scanError || 'No scan-eligible universe snapshot for chain: chain-eth',
+        needsUniverseRefresh: true,
+        canRescan: true
       });
     }
 
@@ -231,6 +249,56 @@ export async function registerDeterministicApiMocks(page: Page) {
           { snapshotDateUtc: '2026-02-12', totalUsdValue: 1000 },
           { snapshotDateUtc: '2026-02-13', totalUsdValue: 1200 }
         ]
+      });
+    }
+
+    if (method === 'GET' && path === '/api/portfolio/dashboard') {
+      return ok(route, {
+        latestSnapshot: {
+          id: 'snapshot-1',
+          snapshotDateUtc: '2026-02-13',
+          status: 'partial',
+          finishedAt: '2026-02-13T00:00:00.000Z'
+        },
+        totals: {
+          portfolioUsdValue: 1200,
+          tokenUsdValue: 900,
+          protocolUsdValue: 300
+        },
+        rows: {
+          tokens: [
+            {
+              snapshotItemId: 'item-token-1',
+              walletId: 'wallet-1',
+              assetRefId: 'token-1',
+              symbol: 'AAA',
+              quantity: 2,
+              usdPrice: 100,
+              usdValue: 200,
+              valuationStatus: 'known'
+            }
+          ],
+          protocols: [
+            {
+              snapshotItemId: 'item-protocol-1',
+              walletId: 'wallet-1',
+              assetRefId: 'protocol-1',
+              symbol: 'sAAA',
+              protocolLabel: 'Staking',
+              protocolCategory: 'staking',
+              quantity: 1,
+              usdPrice: null,
+              usdValue: null,
+              valuationStatus: 'unknown'
+            }
+          ]
+        },
+        jobs: {
+          snapshot: {
+            status: 'partial',
+            errorMessage: 'protocol read failures detected'
+          }
+        }
       });
     }
 

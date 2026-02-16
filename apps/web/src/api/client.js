@@ -45,5 +45,7 @@ export const api = {
   getSnapshotLatest: () => request('/api/snapshots/latest'),
   getSnapshotJobStatus: () => request('/api/snapshots/jobs/status'),
 
-  getHistory: () => request('/api/portfolio/history')
+  getHistory: () => request('/api/portfolio/history'),
+  getDashboard: () => request('/api/portfolio/dashboard'),
+  getWalletOnboardingStatus: (walletId) => request(`/api/wallets/${walletId}/onboarding-status`)
 };

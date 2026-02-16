@@ -88,3 +88,38 @@ test('protocols: invalid abi mappings are rejected before persistence', async ()
 
   assert.equal(insertAttempted, false);
 });
+
+test('protocols: default preview executor rejects unsupported runtime reads', async () => {
+  let insertAttempted = false;
+
+  const service = createProtocolContractService({
+    pool: {
+      query: async (sql) => {
+        if (sql.includes('INSERT INTO protocol_contracts')) {
+          insertAttempted = true;
+        }
+        return { rows: [] };
+      }
+    }
+  });
+
+  await assert.rejects(
+    () =>
+      service.createProtocolContract({
+        chainId: 'chain-1',
+        contractAddress: '0x123',
+        label: 'Unsupported',
+        category: 'staking',
+        abiMapping: {
+          positionRead: {
+            function: 'customRead',
+            args: ['$walletAddress'],
+            returns: 'uint256'
+          }
+        }
+      }),
+    /Unsupported protocol read signature/i
+  );
+
+  assert.equal(insertAttempted, false);
+});

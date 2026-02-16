@@ -20,6 +20,7 @@ mkdir -p "$TRACE_DIR" "$REPORT_DIR"
 STARTED_AT="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 set +e
 PLAYWRIGHT_HTML_REPORT="$REPORT_DIR" \
+PLAYWRIGHT_INCLUDE_LIVE="true" \
 npx playwright test --config "$ROOT_DIR/e2e/playwright.config.ts" --grep '@live' --output "$TRACE_DIR" >"$LOG_FILE" 2>&1
 EXIT_CODE=$?
 set -e

@@ -23,6 +23,7 @@ import { createUniverseRefreshService } from './services/universe/universe-refre
 import { createBirdeyeClient } from './services/universe/universe-sources/birdeye.client.js';
 import { createCoinGeckoClient } from './services/universe/universe-sources/coingecko.client.js';
 import { createProtocolContractService } from './services/protocols/protocol-contract.service.js';
+import { createProtocolPositionResolver } from './services/protocols/protocol-position-resolver.js';
 import { createDailySnapshotService } from './services/snapshots/daily-snapshot.service.js';
 import { createManualTokenService } from './services/tokens/manual-token.service.js';
 import { createValuationService } from './services/valuation/valuation.service.js';
@@ -61,14 +62,19 @@ export function createApp({
       allowUnsafeLocalRpc: runtimeEnv.allowUnsafeRpcUrls
     });
   const coingeckoClient = createCoinGeckoClient({
-    apiKey: runtimeEnv.coingeckoApiKey
+    apiKey: runtimeEnv.coingeckoApiKey,
+    baseUrl: runtimeEnv.coingeckoBaseUrl,
+    keyMode: runtimeEnv.coingeckoKeyMode
   });
+  const birdeyeClient = runtimeEnv.birdeyeApiKey
+    ? createBirdeyeClient({ apiKey: runtimeEnv.birdeyeApiKey })
+    : null;
   const resolvedUniverseRefreshService =
     universeRefreshService ??
     createUniverseRefreshService({
       chainsRepository: resolvedChainsRepository,
       tokenUniverseRepository: resolvedTokenUniverseRepository,
-      birdeyeClient: createBirdeyeClient(),
+      birdeyeClient,
       coingeckoClient
     });
   const resolvedWalletScanService =
@@ -88,12 +94,15 @@ export function createApp({
   });
   const protocolContractService = createProtocolContractService({ pool });
   const valuationService = createValuationService();
+  const protocolPositionResolver = createProtocolPositionResolver();
   const dailySnapshotService = createDailySnapshotService({
     chainsRepository: resolvedChainsRepository,
     walletsRepository: resolvedWalletsRepository,
     scansRepository: resolvedScansRepository,
     snapshotsRepository: resolvedSnapshotsRepository,
-    valuationService
+    valuationService,
+    protocolContractService,
+    protocolPositionResolver
   });
 
   app.use(cors());

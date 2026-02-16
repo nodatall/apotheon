@@ -60,7 +60,7 @@ test('protocols route: returns 400 for invalid abi mapping payloads', async () =
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       chainId: 'c1',
-      contractAddress: '0xABC',
+      contractAddress: '0x1234567890123456789012345678901234567890',
       label: 'Broken',
       category: 'staking',
       abiMapping: {
@@ -76,4 +76,42 @@ test('protocols route: returns 400 for invalid abi mapping payloads', async () =
   assert.equal(response.status, 400);
   const body = await response.json();
   assert.match(body.error, /non-empty string/i);
+});
+
+test('protocols route: rejects invalid contract address for chain family', async () => {
+  const baseUrl = await startServer(
+    createProtocolsRouter({
+      chainsRepository: {
+        getChainById: async () => ({ id: 'c1', family: 'evm' })
+      },
+      protocolContractService: {
+        createProtocolContract: async () => {
+          throw new Error('should not be called');
+        },
+        listProtocolContracts: async () => []
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/protocols/contracts`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      chainId: 'c1',
+      contractAddress: 'not-an-address',
+      label: 'Broken',
+      category: 'staking',
+      abiMapping: {
+        positionRead: {
+          function: 'balanceOf',
+          args: ['$walletAddress'],
+          returns: 'uint256'
+        }
+      }
+    })
+  });
+
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.match(body.error, /invalid/i);
 });

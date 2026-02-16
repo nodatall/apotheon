@@ -22,6 +22,14 @@ function validateAddressForChain(chainFamily, address) {
   return false;
 }
 
+function deriveOnboardingHints({ scanStatus, scanError }) {
+  const message = typeof scanError === 'string' ? scanError.toLowerCase() : '';
+  return {
+    needsUniverseRefresh: message.includes('no scan-eligible universe snapshot'),
+    canRescan: scanStatus !== 'running'
+  };
+}
+
 export function createWalletsRouter({
   chainsRepository,
   walletsRepository,
@@ -81,14 +89,17 @@ export function createWalletsRouter({
       } catch (error) {
         scanError = error instanceof Error ? error.message : String(error);
       }
+      const scanStatus = scan?.scanRun?.status ?? 'failed';
+      const onboardingHints = deriveOnboardingHints({ scanStatus, scanError });
 
       res.status(201).json({
         data: {
           ...wallet,
           walletUniverseScanId: scan?.scanRun?.id ?? null,
           universeSnapshotId: scan?.universeSnapshotId ?? null,
-          scanStatus: scan?.scanRun?.status ?? 'failed',
-          scanError
+          scanStatus,
+          scanError,
+          ...onboardingHints
         }
       });
     } catch (error) {
@@ -120,6 +131,31 @@ export function createWalletsRouter({
         res.status(409).json({ error: error.message });
         return;
       }
+      next(error);
+    }
+  });
+
+  router.get('/:id/onboarding-status', async (req, res, next) => {
+    try {
+      const wallet = await walletsRepository.getWalletById(req.params.id);
+      if (!wallet) {
+        res.status(404).json({ error: 'Wallet not found.' });
+        return;
+      }
+
+      const latestScan = await scansRepository.getLatestScanByWallet(req.params.id);
+      const scanStatus = latestScan?.status ?? null;
+      const scanError = latestScan?.errorMessage ?? null;
+
+      res.json({
+        data: {
+          walletId: req.params.id,
+          scanStatus,
+          scanError,
+          ...deriveOnboardingHints({ scanStatus, scanError })
+        }
+      });
+    } catch (error) {
       next(error);
     }
   });

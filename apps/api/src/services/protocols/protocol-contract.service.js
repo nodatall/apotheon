@@ -1,4 +1,5 @@
 import { validateAbiMappingWithPreview } from './abi-mapping-validator.js';
+import { assertProtocolAbiMappingSupported } from './protocol-position-resolver.js';
 
 function mapProtocolRow(row) {
   if (!row) {
@@ -20,7 +21,24 @@ function mapProtocolRow(row) {
   };
 }
 
-export function createProtocolContractService({ pool, previewExecutor = async () => ({ ok: true }) }) {
+function createDefaultPreviewExecutor() {
+  return async (abiMapping) => {
+    try {
+      assertProtocolAbiMappingSupported(abiMapping);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  };
+}
+
+export function createProtocolContractService({
+  pool,
+  previewExecutor = createDefaultPreviewExecutor()
+}) {
   async function createProtocolContract({ chainId, contractAddress, label, category, abiMapping }) {
     await validateAbiMappingWithPreview({ abiMapping, previewExecutor });
 
@@ -65,8 +83,27 @@ export function createProtocolContractService({ pool, previewExecutor = async ()
     return rows.map(mapProtocolRow);
   }
 
+  async function listSnapshotEligibleContracts({ chainId }) {
+    const { rows } = await pool.query(
+      `
+        SELECT
+          id, chain_id, contract_address, label, category, abi_mapping,
+          validation_status, validation_error, is_active, created_at, updated_at
+        FROM protocol_contracts
+        WHERE chain_id = $1
+          AND is_active = TRUE
+          AND validation_status = 'valid'
+        ORDER BY created_at DESC
+      `,
+      [chainId]
+    );
+
+    return rows.map(mapProtocolRow);
+  }
+
   return {
     createProtocolContract,
-    listProtocolContracts
+    listProtocolContracts,
+    listSnapshotEligibleContracts
   };
 }

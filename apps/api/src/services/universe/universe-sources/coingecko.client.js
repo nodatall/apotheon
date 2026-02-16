@@ -48,16 +48,32 @@ async function mapWithConcurrency(items, mapper, concurrency) {
   return output;
 }
 
+function resolveKeyMode({ baseUrl, keyMode }) {
+  if (keyMode && keyMode !== 'auto') {
+    return keyMode;
+  }
+
+  const host = new URL(baseUrl).host.toLowerCase();
+  return host === 'pro-api.coingecko.com' ? 'pro' : 'demo';
+}
+
+function resolveApiKeyHeader({ baseUrl, keyMode }) {
+  const mode = resolveKeyMode({ baseUrl, keyMode });
+  return mode === 'pro' ? 'x-cg-pro-api-key' : 'x-cg-demo-api-key';
+}
+
 export function createCoinGeckoClient({
   fetchImpl = fetch,
   apiKey = process.env.COINGECKO_API_KEY || '',
   baseUrl = DEFAULT_COINGECKO_BASE_URL,
   timeoutMs = 15000,
-  platformFetchConcurrency = 8
+  platformFetchConcurrency = 8,
+  keyMode = 'auto'
 } = {}) {
   if (!apiKey || apiKey.trim().length === 0) {
     throw new Error('CoinGecko API key is required.');
   }
+  const apiKeyHeader = resolveApiKeyHeader({ baseUrl, keyMode });
 
   async function requestJson(url) {
     const controller = new AbortController();
@@ -68,7 +84,7 @@ export function createCoinGeckoClient({
         method: 'GET',
         headers: {
           accept: 'application/json',
-          'x-cg-pro-api-key': apiKey
+          [apiKeyHeader]: apiKey
         },
         signal: controller.signal
       });
