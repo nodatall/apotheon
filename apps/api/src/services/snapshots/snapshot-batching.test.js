@@ -189,3 +189,49 @@ test('snapshot-batching: protocol read failures degrade snapshot to partial and 
   assert.equal(completed.status, 'partial');
   assert.match(completed.errorMessage, /Broken Protocol/i);
 });
+
+test('snapshot-batching: missing protocol resolver is surfaced as partial failure', async () => {
+  const snapshotWrites = [];
+
+  const service = createDailySnapshotService({
+    chainsRepository: {
+      getChainById: async () => ({ id: 'chain-1', family: 'evm' })
+    },
+    walletsRepository: {
+      listWallets: async () => [{ id: 'wallet-1', chainId: 'chain-1' }]
+    },
+    scansRepository: {
+      getLatestSuccessfulScanItemsByWallet: async () => []
+    },
+    snapshotsRepository: {
+      getDailySnapshotByDate: async () => null,
+      upsertDailySnapshot: async (payload) => {
+        snapshotWrites.push(payload);
+        return { id: 'snapshot-1', ...payload };
+      },
+      upsertSnapshotItem: async () => ({})
+    },
+    valuationService: {
+      valuatePositions: async ({ positions }) => positions
+    },
+    protocolContractService: {
+      listSnapshotEligibleContracts: async () => [
+        {
+          id: 'protocol-1',
+          chainId: 'chain-1',
+          contractAddress: '0xproto',
+          label: 'Protocol One',
+          category: 'staking',
+          validationStatus: 'valid',
+          isActive: true
+        }
+      ]
+    }
+  });
+
+  await service.runDailySnapshot({ snapshotDateUtc: '2026-02-13' });
+
+  const completed = snapshotWrites[snapshotWrites.length - 1];
+  assert.equal(completed.status, 'partial');
+  assert.match(completed.errorMessage, /not configured/i);
+});

@@ -9,7 +9,11 @@ function resolveProtocolPositionResolver(protocolPositionResolver) {
   if (protocolPositionResolver && typeof protocolPositionResolver.resolvePosition === 'function') {
     return protocolPositionResolver.resolvePosition.bind(protocolPositionResolver);
   }
-  return async () => null;
+  return async ({ protocol }) => {
+    throw new Error(
+      `Protocol position resolver is not configured for ${protocol?.id || 'unknown protocol'}.`
+    );
+  };
 }
 
 async function loadSnapshotEligibleProtocols({ protocolContractService, chainId }) {

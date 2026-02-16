@@ -39,18 +39,14 @@ export function createValuationService({
       }
 
       if (dexFallbackClient?.getPriceByContract && missingContracts.length > 0) {
-        const fallbackRows = await Promise.all(
-          missingContracts.map(async (contract) => ({
-            contract,
-            price: await dexFallbackClient
-              .getPriceByContract({ chain, contract })
-              .catch(() => null)
-          }))
+        const fallbackResults = await Promise.allSettled(
+          missingContracts.map((contract) => dexFallbackClient.getPriceByContract({ chain, contract }))
         );
 
-        for (const fallback of fallbackRows) {
-          if (typeof fallback.price === 'number') {
-            prices.set(fallback.contract, fallback.price);
+        for (let index = 0; index < fallbackResults.length; index += 1) {
+          const outcome = fallbackResults[index];
+          if (outcome.status === 'fulfilled' && typeof outcome.value === 'number') {
+            prices.set(missingContracts[index], outcome.value);
           }
         }
       }

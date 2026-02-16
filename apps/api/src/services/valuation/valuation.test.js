@@ -27,3 +27,25 @@ test('valuation: preserves quantity rows with unknown valuation when prices miss
   assert.equal(valued[1].valuationStatus, 'unknown');
   assert.equal(valued[1].quantity, 7);
 });
+
+test('valuation: fallback client failures do not throw and remain unknown', async () => {
+  const valuationService = createValuationService({
+    coingeckoClient: {
+      getPricesByContracts: async () => ({})
+    },
+    dexFallbackClient: {
+      getPriceByContract: async () => {
+        throw new Error('fallback provider unavailable');
+      }
+    }
+  });
+
+  const valued = await valuationService.valuatePositions({
+    chain: { slug: 'ethereum' },
+    positions: [{ contractOrMint: '0xunknown', quantity: 7 }]
+  });
+
+  assert.equal(valued[0].valuationStatus, 'unknown');
+  assert.equal(valued[0].usdValue, null);
+  assert.equal(valued[0].quantity, 7);
+});

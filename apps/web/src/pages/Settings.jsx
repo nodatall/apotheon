@@ -29,14 +29,31 @@ export default function Settings() {
     () => chains.find((chain) => chain.id === selectedChainId) || null,
     [chains, selectedChainId]
   );
+  const selectedWallet = useMemo(
+    () => wallets.find((wallet) => wallet.id === selectedWalletId) || null,
+    [wallets, selectedWalletId]
+  );
+  const chainNameById = useMemo(
+    () =>
+      chains.reduce((accumulator, chain) => {
+        accumulator[chain.id] = chain.name;
+        return accumulator;
+      }, {}),
+    [chains]
+  );
   const recentWallets = useMemo(() => wallets.slice(0, 5), [wallets]);
+  const walletDisplay =
+    selectedWallet?.address || walletOutcome?.address || walletOutcome?.walletId || selectedWalletId || 'n/a';
 
   async function refresh() {
-    const [chainRows, walletRows, snapshotJob] = await Promise.all([
-      api.getChains(),
-      api.getWallets(),
-      api.getSnapshotJobStatus().catch(() => null)
-    ]);
+    const [chainRows, walletRows] = await Promise.all([api.getChains(), api.getWallets()]);
+    let snapshotJob = null;
+    try {
+      snapshotJob = await api.getSnapshotJobStatus();
+    } catch (snapshotError) {
+      setError(snapshotError instanceof Error ? snapshotError.message : String(snapshotError));
+    }
+
     setChains(chainRows || []);
     setWallets(walletRows || []);
     setSnapshotStatus(snapshotJob);
@@ -48,21 +65,43 @@ export default function Settings() {
       return;
     }
 
-    const [status, onboarding] = await Promise.all([
-      api.getWalletJobStatus(walletId).catch(() => null),
-      api.getWalletOnboardingStatus(walletId).catch(() => null)
+    const [statusResult, onboardingResult] = await Promise.allSettled([
+      api.getWalletJobStatus(walletId),
+      api.getWalletOnboardingStatus(walletId)
     ]);
 
-    setWalletStatus(status);
-    if (onboarding) {
-      setWalletOutcome((prev) => ({
-        ...(prev || {}),
+    if (statusResult.status === 'fulfilled') {
+      setWalletStatus(statusResult.value);
+    } else {
+      setWalletStatus(null);
+      setError(statusResult.reason instanceof Error ? statusResult.reason.message : String(statusResult.reason));
+    }
+
+    if (onboardingResult.status === 'fulfilled') {
+      const onboarding = onboardingResult.value;
+      const onboardingWallet = wallets.find((wallet) => wallet.id === onboarding.walletId) || null;
+      setWalletOutcome({
         walletId: onboarding.walletId,
+        address: onboardingWallet?.address || null,
         scanStatus: onboarding.scanStatus,
         scanError: onboarding.scanError,
         needsUniverseRefresh: onboarding.needsUniverseRefresh,
         canRescan: onboarding.canRescan
-      }));
+      });
+    } else {
+      setWalletOutcome({
+        walletId,
+        address: wallets.find((wallet) => wallet.id === walletId)?.address || null,
+        scanStatus: null,
+        scanError: 'Unable to load onboarding status.',
+        needsUniverseRefresh: false,
+        canRescan: true
+      });
+      setError(
+        onboardingResult.reason instanceof Error
+          ? onboardingResult.reason.message
+          : String(onboardingResult.reason)
+      );
     }
   }
 
@@ -85,9 +124,11 @@ export default function Settings() {
   useEffect(() => {
     if (!selectedWalletId) {
       setWalletStatus(null);
+      setWalletOutcome(null);
       return;
     }
 
+    setWalletOutcome(null);
     refreshWalletOutcome(selectedWalletId).catch((loadError) => setError(loadError.message));
   }, [selectedWalletId]);
 
@@ -121,9 +162,7 @@ export default function Settings() {
       setSelectedChainId(createdWallet.chainId);
       setWalletOutcome({
         walletId: createdWallet.id,
-        chainId: createdWallet.chainId,
         address: createdWallet.address,
-        label: createdWallet.label || null,
         scanStatus: createdWallet.scanStatus,
         scanError: createdWallet.scanError,
         needsUniverseRefresh: createdWallet.needsUniverseRefresh,
@@ -176,6 +215,19 @@ export default function Settings() {
     }
   }
 
+  async function refreshSelectedWalletOnboarding() {
+    if (!selectedWalletId) {
+      return;
+    }
+
+    setError('');
+    try {
+      await refreshWalletOutcome(selectedWalletId);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : String(refreshError));
+    }
+  }
+
   return (
     <div className="page-grid">
       <section className="card">
@@ -194,7 +246,7 @@ export default function Settings() {
           </button>
           <button
             type="button"
-            onClick={() => refreshWalletOutcome(selectedWalletId)}
+            onClick={refreshSelectedWalletOnboarding}
             disabled={!selectedWalletId}
           >
             Refresh Onboarding Status
@@ -318,7 +370,7 @@ export default function Settings() {
               scan: {formatScanStatus(walletOutcome.scanStatus)}
             </p>
             <p className="muted">
-              Wallet: {walletOutcome.address || walletOutcome.walletId || selectedWalletId || 'n/a'}
+              Wallet: {walletDisplay}
             </p>
             {walletOutcome.scanError ? <p className="error">{walletOutcome.scanError}</p> : null}
             <div className="list-row">
@@ -352,7 +404,7 @@ export default function Settings() {
               recentWallets.map((wallet) => (
                 <tr key={wallet.id}>
                   <td>{wallet.address}</td>
-                  <td>{chains.find((chain) => chain.id === wallet.chainId)?.name || wallet.chainId}</td>
+                  <td>{chainNameById[wallet.chainId] || wallet.chainId}</td>
                   <td>{wallet.label || 'n/a'}</td>
                 </tr>
               ))

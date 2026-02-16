@@ -1,4 +1,5 @@
 import { validateAbiMappingWithPreview } from './abi-mapping-validator.js';
+import { assertProtocolAbiMappingSupported } from './protocol-position-resolver.js';
 
 function mapProtocolRow(row) {
   if (!row) {
@@ -20,7 +21,24 @@ function mapProtocolRow(row) {
   };
 }
 
-export function createProtocolContractService({ pool, previewExecutor = async () => ({ ok: true }) }) {
+function createDefaultPreviewExecutor() {
+  return async (abiMapping) => {
+    try {
+      assertProtocolAbiMappingSupported(abiMapping);
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  };
+}
+
+export function createProtocolContractService({
+  pool,
+  previewExecutor = createDefaultPreviewExecutor()
+}) {
   async function createProtocolContract({ chainId, contractAddress, label, category, abiMapping }) {
     await validateAbiMappingWithPreview({ abiMapping, previewExecutor });
 

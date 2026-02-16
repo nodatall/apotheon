@@ -2,6 +2,24 @@ import { Router } from 'express';
 import { normalizeAddressForChain } from '../services/shared/address-normalization.js';
 import { AbiMappingValidationError } from '../services/protocols/abi-mapping-validator.js';
 
+function isEvmAddress(address) {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
+
+function isSolanaAddress(address) {
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
+}
+
+function validateAddressForChain(chainFamily, address) {
+  if (chainFamily === 'evm') {
+    return isEvmAddress(address);
+  }
+  if (chainFamily === 'solana') {
+    return isSolanaAddress(address);
+  }
+  return false;
+}
+
 export function createProtocolsRouter({ chainsRepository, protocolContractService }) {
   const router = Router();
 
@@ -38,6 +56,12 @@ export function createProtocolsRouter({ chainsRepository, protocolContractServic
       const chain = await chainsRepository.getChainById(chainId);
       if (!chain) {
         res.status(400).json({ error: 'Unknown chainId.' });
+        return;
+      }
+      if (!validateAddressForChain(chain.family, contractAddress)) {
+        res
+          .status(400)
+          .json({ error: `Contract address format is invalid for chain family ${chain.family}.` });
         return;
       }
 
