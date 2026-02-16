@@ -1,6 +1,12 @@
 import { Router } from 'express';
 
-export function createAssetsRouter({ chainsRepository, manualTokenService, trackedTokensRepository }) {
+export function createAssetsRouter({
+  chainsRepository,
+  walletsRepository,
+  walletScanService,
+  manualTokenService,
+  trackedTokensRepository
+}) {
   const router = Router();
 
   router.get('/tokens', async (req, res, next) => {
@@ -17,6 +23,7 @@ export function createAssetsRouter({ chainsRepository, manualTokenService, track
     const chainId = typeof req.body?.chainId === 'string' ? req.body.chainId.trim() : '';
     const contractOrMint =
       typeof req.body?.contractOrMint === 'string' ? req.body.contractOrMint.trim() : '';
+    const walletId = typeof req.body?.walletId === 'string' ? req.body.walletId.trim() : '';
 
     if (!chainId || !contractOrMint) {
       res.status(400).json({ error: 'chainId and contractOrMint are required.' });
@@ -39,6 +46,19 @@ export function createAssetsRouter({ chainsRepository, manualTokenService, track
         res.status(400).json({ error: 'Unknown chainId.' });
         return;
       }
+      let wallet = null;
+      if (walletId) {
+        wallet = await walletsRepository.getWalletById(walletId);
+        if (!wallet) {
+          res.status(400).json({ error: 'Unknown walletId.' });
+          return;
+        }
+
+        if (wallet.chainId !== chainId) {
+          res.status(400).json({ error: 'walletId must belong to the provided chainId.' });
+          return;
+        }
+      }
 
       const token = await manualTokenService.registerManualToken({
         chain,
@@ -48,7 +68,24 @@ export function createAssetsRouter({ chainsRepository, manualTokenService, track
         decimals
       });
 
-      res.status(201).json({ data: token });
+      let scan = null;
+      let scanError = null;
+      if (wallet) {
+        try {
+          scan = await walletScanService.rescanWallet({ walletId: wallet.id });
+        } catch (error) {
+          scanError = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      res.status(201).json({
+        data: {
+          ...token,
+          walletScanId: scan?.scanRun?.id ?? null,
+          walletScanStatus: scan?.scanRun?.status ?? null,
+          walletScanError: scanError
+        }
+      });
     } catch (error) {
       if (error instanceof Error && /contractOrMint/.test(error.message)) {
         res.status(400).json({ error: error.message });

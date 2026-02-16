@@ -31,6 +31,14 @@ function normalizeAddress(address) {
   return trimmed;
 }
 
+function chunk(values, size) {
+  const out = [];
+  for (let index = 0; index < values.length; index += size) {
+    out.push(values.slice(index, index + size));
+  }
+  return out;
+}
+
 async function mapWithConcurrency(items, mapper, concurrency) {
   const limit = Math.max(1, Math.min(concurrency, items.length));
   const output = new Array(items.length);
@@ -60,6 +68,15 @@ function resolveKeyMode({ baseUrl, keyMode }) {
 function resolveApiKeyHeader({ baseUrl, keyMode }) {
   const mode = resolveKeyMode({ baseUrl, keyMode });
   return mode === 'pro' ? 'x-cg-pro-api-key' : 'x-cg-demo-api-key';
+}
+
+function createApiUrl(baseUrl, path) {
+  const base = new URL(baseUrl);
+  const basePath = base.pathname.replace(/\/$/, '');
+  const resourcePath = path.startsWith('/') ? path : `/${path}`;
+  base.pathname = `${basePath}${resourcePath}`;
+  base.search = '';
+  return base;
 }
 
 export function createCoinGeckoClient({
@@ -101,7 +118,7 @@ export function createCoinGeckoClient({
 
   async function fetchMarkets(limit) {
     const perPage = Math.min(250, Math.max(limit, 1));
-    const url = new URL('/coins/markets', baseUrl);
+    const url = createApiUrl(baseUrl, '/coins/markets');
     url.searchParams.set('vs_currency', 'usd');
     url.searchParams.set('order', 'market_cap_desc');
     url.searchParams.set('per_page', String(perPage));
@@ -112,7 +129,7 @@ export function createCoinGeckoClient({
   }
 
   async function fetchCoinPlatforms(coinId) {
-    const url = new URL(`/coins/${coinId}`, baseUrl);
+    const url = createApiUrl(baseUrl, `/coins/${coinId}`);
     url.searchParams.set('localization', 'false');
     url.searchParams.set('tickers', 'false');
     url.searchParams.set('market_data', 'false');
@@ -174,7 +191,43 @@ export function createCoinGeckoClient({
     return tokens;
   }
 
+  async function getPricesByContracts({ chain, contracts }) {
+    const platform = resolveCoinGeckoPlatform(chain);
+    if (!platform || !Array.isArray(contracts) || contracts.length === 0) {
+      return {};
+    }
+
+    const normalizedContracts = [
+      ...new Set(
+        contracts
+          .map((contract) => normalizeAddress(contract))
+          .filter((contract) => Boolean(contract))
+          .map((contract) => (chain.family === 'evm' ? contract.toLowerCase() : contract))
+      )
+    ];
+
+    const prices = {};
+    for (const group of chunk(normalizedContracts, 100)) {
+      const url = createApiUrl(baseUrl, `/simple/token_price/${platform}`);
+      url.searchParams.set('contract_addresses', group.join(','));
+      url.searchParams.set('vs_currencies', 'usd');
+
+      const body = await requestJson(url);
+      for (const [contract, quote] of Object.entries(body || {})) {
+        if (typeof quote?.usd !== 'number') {
+          continue;
+        }
+
+        const normalizedContract = chain.family === 'evm' ? contract.toLowerCase() : contract;
+        prices[normalizedContract] = quote.usd;
+      }
+    }
+
+    return prices;
+  }
+
   return {
-    fetchTopTokens
+    fetchTopTokens,
+    getPricesByContracts
   };
 }

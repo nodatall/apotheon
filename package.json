@@ -15,7 +15,7 @@
     "start": "npm run start --workspace @apotheon/api",
     "lint": "npm run lint --workspace @apotheon/api && npm run lint --workspace @apotheon/web",
     "test:e2e": "playwright test --config e2e/playwright.config.ts --grep-invert @live",
-    "test:e2e:live": "playwright test --config e2e/playwright.config.ts --grep @live"
+    "test:e2e:live": "PLAYWRIGHT_INCLUDE_LIVE=true playwright test --config e2e/playwright.config.ts --grep @live"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

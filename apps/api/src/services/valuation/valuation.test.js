@@ -49,3 +49,28 @@ test('valuation: fallback client failures do not throw and remain unknown', asyn
   assert.equal(valued[0].usdValue, null);
   assert.equal(valued[0].quantity, 7);
 });
+
+test('valuation: supports valuationContractOrMint override for pricing', async () => {
+  const valuationService = createValuationService({
+    coingeckoClient: {
+      getPricesByContracts: async () => ({
+        '0xwrapped': 2500
+      })
+    }
+  });
+
+  const [valued] = await valuationService.valuatePositions({
+    chain: { slug: 'arbitrum', family: 'evm' },
+    positions: [
+      {
+        contractOrMint: 'native:arbitrum',
+        valuationContractOrMint: '0xwrapped',
+        quantity: 0.5
+      }
+    ]
+  });
+
+  assert.equal(valued.valuationStatus, 'known');
+  assert.equal(valued.usdPrice, 2500);
+  assert.equal(valued.usdValue, 1250);
+});

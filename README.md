@@ -6,7 +6,7 @@ Bare-bones monorepo scaffold for an on-chain crypto portfolio app.
 
 - `apps/web`: React + Vite
 - `apps/api`: Express + Node.js
-- PostgreSQL via Docker Compose
+- PostgreSQL
 - Local `rules/` copied from AutoProphet for planning workflows
 
 ## Quick start
@@ -15,11 +15,12 @@ Bare-bones monorepo scaffold for an on-chain crypto portfolio app.
    ```bash
    npm install
    ```
-2. Start PostgreSQL:
+2. Configure environment:
    ```bash
-   docker compose up -d postgres
+   cp .env.example .env
    ```
-3. Start API + web:
+3. Ensure PostgreSQL is running locally and `DATABASE_URL` in `.env` points to it.
+4. Start API + web:
    ```bash
    npm run dev
    ```

@@ -8,6 +8,57 @@ function encodeBalanceOf(walletAddress) {
   return `0x${selector}${stripped.padStart(64, '0')}`;
 }
 
+function encodeDecimalsCall() {
+  return '0x313ce567';
+}
+
+const RPC_FALLBACKS_BY_SLUG = {
+  ethereum: ['https://ethereum.publicnode.com'],
+  arbitrum: ['https://arbitrum.llamarpc.com', 'https://arbitrum-one-rpc.publicnode.com'],
+  base: ['https://base-rpc.publicnode.com'],
+  optimism: ['https://optimism-rpc.publicnode.com'],
+  polygon: ['https://polygon-bor-rpc.publicnode.com'],
+  bsc: ['https://bsc-rpc.publicnode.com'],
+  avalanche: ['https://avalanche-c-chain-rpc.publicnode.com']
+};
+
+function resolveRpcUrls(chain) {
+  const configured = typeof chain?.rpcUrl === 'string' ? chain.rpcUrl.trim() : '';
+  const fallback = Array.isArray(RPC_FALLBACKS_BY_SLUG[chain?.slug])
+    ? RPC_FALLBACKS_BY_SLUG[chain.slug]
+    : [];
+  const seen = new Set();
+
+  return [configured, ...fallback].filter((url) => {
+    if (typeof url !== 'string') {
+      return false;
+    }
+    const normalized = url.trim();
+    if (!normalized || seen.has(normalized)) {
+      return false;
+    }
+    seen.add(normalized);
+    return true;
+  });
+}
+
+async function mapWithConcurrency(items, mapper, concurrency) {
+  const safeConcurrency = Math.max(1, Math.min(concurrency, items.length || 1));
+  const out = new Array(items.length);
+  let cursor = 0;
+
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      out[index] = await mapper(items[index], index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: safeConcurrency }, () => worker()));
+  return out;
+}
+
 function normalizeHexQuantity(hexValue, decimals = 18) {
   if (typeof hexValue !== 'string' || !hexValue.startsWith('0x')) {
     throw new Error(`Invalid hex quantity response: ${hexValue}`);
@@ -50,39 +101,130 @@ async function rpcCall({ fetchImpl, rpcUrl, payload, timeoutMs }) {
   }
 }
 
+function isPositiveHexQuantity(hexValue) {
+  if (typeof hexValue !== 'string' || !hexValue.startsWith('0x')) {
+    return false;
+  }
+
+  try {
+    return BigInt(hexValue) > 0n;
+  } catch {
+    return false;
+  }
+}
+
 export function createEvmBalanceResolver({ fetchImpl = fetch, timeoutMs = 10000 } = {}) {
+  async function rpcCallWithRetry({
+    rpcUrls,
+    payload,
+    attempts = 2,
+    retryDelayMs = 250
+  }) {
+    let lastError = null;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      for (const rpcUrl of rpcUrls) {
+        try {
+          return await rpcCall({
+            fetchImpl,
+            rpcUrl,
+            payload,
+            timeoutMs
+          });
+        } catch (error) {
+          lastError = error;
+        }
+      }
+      if (attempt < attempts) {
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * attempt));
+      }
+    }
+
+    throw lastError;
+  }
+
   return async function resolveEvmBalances({ chain, walletAddress, tokens }) {
-    if (!chain?.rpcUrl) {
+    const rpcUrls = resolveRpcUrls(chain);
+    if (rpcUrls.length === 0) {
       throw new Error('EVM chain RPC URL is required for balance resolution.');
     }
 
-    const results = await Promise.all(
-      tokens.map(async (token) => {
-        const data = encodeBalanceOf(walletAddress);
-        const balanceRaw = await rpcCall({
-          fetchImpl,
-          rpcUrl: chain.rpcUrl,
-          timeoutMs,
-          payload: {
-            jsonrpc: '2.0',
-            id: 1,
-            method: 'eth_call',
-            params: [
-              {
-                to: token.contractOrMint,
-                data
-              },
-              'latest'
-            ]
-          }
-        });
+    const results = await mapWithConcurrency(
+      tokens,
+      async (token) => {
+        try {
+          const balanceRaw =
+            token.isNative === true
+              ? await rpcCallWithRetry({
+                  rpcUrls,
+                  payload: {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'eth_getBalance',
+                    params: [walletAddress, 'latest']
+                  }
+                })
+              : await rpcCallWithRetry({
+                  rpcUrls,
+                  payload: {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    method: 'eth_call',
+                    params: [
+                      {
+                        to: token.contractOrMint,
+                        data: encodeBalanceOf(walletAddress)
+                      },
+                      'latest'
+                    ]
+                  }
+                });
 
-        return {
-          contractOrMint: token.contractOrMint,
-          balanceRaw,
-          balanceNormalized: normalizeHexQuantity(balanceRaw, token.decimals ?? 18)
-        };
-      })
+          let decimals = Number.isInteger(token.decimals) ? token.decimals : null;
+          if (!token.isNative && decimals === null && isPositiveHexQuantity(balanceRaw)) {
+            try {
+              const decimalsRaw = await rpcCallWithRetry({
+                rpcUrls,
+                payload: {
+                  jsonrpc: '2.0',
+                  id: 1,
+                  method: 'eth_call',
+                  params: [
+                    {
+                      to: token.contractOrMint,
+                      data: encodeDecimalsCall()
+                    },
+                    'latest'
+                  ]
+                }
+              });
+              if (typeof decimalsRaw === 'string' && decimalsRaw.startsWith('0x')) {
+                const parsedDecimals = Number(BigInt(decimalsRaw));
+                if (Number.isInteger(parsedDecimals) && parsedDecimals >= 0 && parsedDecimals <= 36) {
+                  decimals = parsedDecimals;
+                }
+              }
+            } catch (_error) {
+              decimals = null;
+            }
+          }
+
+          return {
+            contractOrMint: token.contractOrMint,
+            balanceRaw,
+            balanceNormalized: normalizeHexQuantity(balanceRaw, decimals ?? 18),
+            resolutionError: false
+          };
+        } catch (error) {
+          return {
+            contractOrMint: token.contractOrMint,
+            balanceRaw: '0x0',
+            balanceNormalized: 0,
+            resolutionError: true,
+            resolutionErrorMessage: error instanceof Error ? error.message : String(error)
+          };
+        }
+      },
+      4
     );
 
     return results;

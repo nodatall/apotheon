@@ -11,7 +11,7 @@ export const BUILTIN_CHAINS = [
     name: 'Ethereum',
     family: 'evm',
     chainId: 1,
-    rpcUrl: 'https://cloudflare-eth.com'
+    rpcUrl: 'https://eth.llamarpc.com'
   },
   {
     slug: 'base',

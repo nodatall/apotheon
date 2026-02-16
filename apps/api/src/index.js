@@ -77,6 +77,9 @@ export function createApp({
       birdeyeClient,
       coingeckoClient
     });
+  const valuationService = createValuationService({
+    coingeckoClient
+  });
   const resolvedWalletScanService =
     walletScanService ??
     createWalletScanService({
@@ -85,6 +88,8 @@ export function createApp({
       tokenUniverseRepository: resolvedTokenUniverseRepository,
       scansRepository: resolvedScansRepository,
       trackedTokensRepository: resolvedTrackedTokensRepository,
+      universeRefreshService: resolvedUniverseRefreshService,
+      valuationService,
       balanceBatcher: createBalanceBatcher({
         evmResolver: createEvmBalanceResolver()
       })
@@ -93,7 +98,6 @@ export function createApp({
     trackedTokensRepository: resolvedTrackedTokensRepository
   });
   const protocolContractService = createProtocolContractService({ pool });
-  const valuationService = createValuationService();
   const protocolPositionResolver = createProtocolPositionResolver();
   const dailySnapshotService = createDailySnapshotService({
     chainsRepository: resolvedChainsRepository,
@@ -136,6 +140,8 @@ export function createApp({
     '/api/assets',
     createAssetsRouter({
       chainsRepository: resolvedChainsRepository,
+      walletsRepository: resolvedWalletsRepository,
+      walletScanService: resolvedWalletScanService,
       manualTokenService,
       trackedTokensRepository: resolvedTrackedTokensRepository
     })
@@ -157,7 +163,8 @@ export function createApp({
   app.use(
     '/api/portfolio',
     createPortfolioRouter({
-      snapshotsRepository: resolvedSnapshotsRepository
+      snapshotsRepository: resolvedSnapshotsRepository,
+      scansRepository: resolvedScansRepository
     })
   );
 

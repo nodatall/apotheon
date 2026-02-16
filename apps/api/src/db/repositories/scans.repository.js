@@ -26,9 +26,13 @@ function mapScanItemRow(row) {
     balanceNormalized: row.balance_normalized,
     heldFlag: row.held_flag,
     autoTrackedFlag: row.auto_tracked_flag,
-    usdValue: row.usd_value,
+    usdValue: row.usd_value === null ? null : Number(row.usd_value),
     valuationStatus: row.valuation_status
   };
+}
+
+function toNumberOrNull(value) {
+  return value === null ? null : Number(value);
 }
 
 export function createScansRepository({ pool }) {
@@ -166,9 +170,106 @@ export function createScansRepository({ pool }) {
     return listScanItems(latestScanId);
   }
 
+  async function getLatestDashboardPayloadFromScans() {
+    const latestScans = await pool.query(
+      `
+        SELECT COUNT(*)::int AS scan_count
+        FROM (
+          SELECT DISTINCT ON (wallet_id) id
+          FROM wallet_universe_scans
+          WHERE status IN ('success', 'partial')
+          ORDER BY wallet_id, created_at DESC
+        ) latest_wallet_scans
+      `
+    );
+    const scanCount = Number(latestScans.rows[0]?.scan_count ?? 0);
+
+    const { rows } = await pool.query(
+      `
+        WITH latest_wallet_scans AS (
+          SELECT DISTINCT ON (wallet_id)
+            id,
+            wallet_id,
+            finished_at,
+            created_at
+          FROM wallet_universe_scans
+          WHERE status IN ('success', 'partial')
+          ORDER BY wallet_id, created_at DESC
+        )
+        SELECT
+          wusi.id AS scan_item_id,
+          lws.id AS scan_id,
+          lws.wallet_id,
+          lws.finished_at AS scan_finished_at,
+          w.address AS wallet_address,
+          wusi.token_id,
+          wusi.contract_or_mint,
+          wusi.balance_normalized,
+          wusi.usd_value,
+          wusi.valuation_status,
+          tt.symbol AS tracked_symbol
+        FROM latest_wallet_scans lws
+        JOIN wallets w ON w.id = lws.wallet_id
+        JOIN wallet_universe_scan_items wusi ON wusi.scan_id = lws.id
+        LEFT JOIN tracked_tokens tt ON tt.id = wusi.token_id
+        WHERE wusi.held_flag = TRUE
+        ORDER BY wusi.usd_value DESC NULLS LAST, wusi.contract_or_mint ASC
+      `
+    );
+
+    let portfolioUsdValue = 0;
+    let latestScanFinishedAt = null;
+    const tokens = [];
+
+    for (const row of rows) {
+      const quantity = Number(row.balance_normalized);
+      const usdValue = toNumberOrNull(row.usd_value);
+      const usdPrice =
+        usdValue !== null && Number.isFinite(quantity) && quantity > 0 ? usdValue / quantity : null;
+      const numericValue = usdValue ?? 0;
+      portfolioUsdValue += numericValue;
+      const finishedAt = row.scan_finished_at ?? null;
+      if (finishedAt && (!latestScanFinishedAt || finishedAt > latestScanFinishedAt)) {
+        latestScanFinishedAt = finishedAt;
+      }
+
+      tokens.push({
+        snapshotItemId: row.scan_item_id,
+        scanId: row.scan_id,
+        walletId: row.wallet_id,
+        walletAddress: row.wallet_address,
+        assetRefId: row.token_id,
+        contractOrMint: row.contract_or_mint,
+        symbol: row.tracked_symbol ?? null,
+        quantity,
+        usdPrice,
+        usdValue,
+        valuationStatus: row.valuation_status
+      });
+    }
+
+    return {
+      latestSnapshot: null,
+      latestLiveScan: {
+        finishedAt: latestScanFinishedAt
+      },
+      hasLiveScans: scanCount > 0,
+      totals: {
+        portfolioUsdValue,
+        tokenUsdValue: portfolioUsdValue,
+        protocolUsdValue: 0
+      },
+      rows: {
+        tokens,
+        protocols: []
+      }
+    };
+  }
+
   return {
     createScanRun,
     getLatestScanByWallet,
+    getLatestDashboardPayloadFromScans,
     getLatestSuccessfulScanItemsByWallet,
     listScanItems,
     updateScanRun,

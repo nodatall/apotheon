@@ -6,6 +6,15 @@ function chunk(values, size) {
   return out;
 }
 
+function normalizeContract({ chain, contract }) {
+  const trimmed = String(contract || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  return chain?.family === 'evm' ? trimmed.toLowerCase() : trimmed;
+}
+
 export function createValuationService({
   coingeckoClient = null,
   dexFallbackClient = null,
@@ -16,7 +25,7 @@ export function createValuationService({
     const uniqueContracts = [
       ...new Set(
         contracts
-          .map((contract) => String(contract || '').trim().toLowerCase())
+          .map((contract) => normalizeContract({ chain, contract }))
           .filter((contract) => contract.length > 0)
       )
     ];
@@ -24,7 +33,11 @@ export function createValuationService({
     for (const group of chunk(uniqueContracts, batchSize)) {
       let primary = {};
       if (coingeckoClient?.getPricesByContracts) {
-        primary = await coingeckoClient.getPricesByContracts({ chain, contracts: group });
+        try {
+          primary = await coingeckoClient.getPricesByContracts({ chain, contracts: group });
+        } catch (_error) {
+          primary = {};
+        }
       }
 
       const missingContracts = [];
@@ -56,11 +69,16 @@ export function createValuationService({
   }
 
   async function valuatePositions({ chain, positions }) {
-    const contracts = positions.map((position) => position.contractOrMint);
+    const contracts = positions.map(
+      (position) => position.valuationContractOrMint ?? position.contractOrMint
+    );
     const prices = await fetchPricesWithFallback({ chain, contracts });
 
     return positions.map((position) => {
-      const key = String(position.contractOrMint).toLowerCase();
+      const key = normalizeContract({
+        chain,
+        contract: position.valuationContractOrMint ?? position.contractOrMint
+      });
       const usdPrice = prices.get(key);
 
       if (typeof usdPrice !== 'number') {

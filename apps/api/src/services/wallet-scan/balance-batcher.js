@@ -25,7 +25,12 @@ function normalizeBalances(tokens, rawResults = []) {
     return {
       contractOrMint: token.contractOrMint,
       balanceRaw: matched?.balanceRaw ?? '0',
-      balanceNormalized: Number(matched?.balanceNormalized ?? 0)
+      balanceNormalized: Number(matched?.balanceNormalized ?? 0),
+      isNative: token.isNative === true,
+      valuationContractOrMint: token.valuationContractOrMint ?? token.contractOrMint,
+      resolutionError: matched?.resolutionError === true,
+      resolutionErrorMessage:
+        typeof matched?.resolutionErrorMessage === 'string' ? matched.resolutionErrorMessage : null
     };
   });
 }

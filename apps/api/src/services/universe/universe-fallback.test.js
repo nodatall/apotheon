@@ -111,6 +111,37 @@ test('refreshChain uses coingecko fallback when birdeye fails', async () => {
   assert.equal(outcome.status, 'partial');
 });
 
+test('CoinGecko client preserves /api/v3 base path when building request URLs', async () => {
+  const calls = [];
+  const client = createCoinGeckoClient({
+    apiKey: 'test-key',
+    baseUrl: 'https://pro-api.coingecko.com/api/v3',
+    fetchImpl: async (url) => {
+      const fullUrl = String(url);
+      calls.push(fullUrl);
+
+      if (fullUrl.includes('/coins/markets')) {
+        return {
+          ok: true,
+          json: async () => [{ id: 'coin-a', symbol: 'aaa', name: 'Coin A', market_cap: 1 }]
+        };
+      }
+
+      return {
+        ok: true,
+        json: async () => ({ platforms: { ethereum: '0xaaa' } })
+      };
+    }
+  });
+
+  await client.fetchTopTokens({
+    chain: { slug: 'ethereum', family: 'evm' },
+    limit: 1
+  });
+
+  assert.ok(calls.every((url) => url.includes('/api/v3/')));
+});
+
 test('CoinGecko client uses demo api-key header for demo key mode', async () => {
   const seenHeaders = [];
   const client = createCoinGeckoClient({

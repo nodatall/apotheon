@@ -9,6 +9,13 @@ test('assertSafeRpcUrl rejects localhost by default', async () => {
   );
 });
 
+test('assertSafeRpcUrl rejects host.docker.internal by default', async () => {
+  await assert.rejects(
+    assertSafeRpcUrl('http://host.docker.internal:8545'),
+    RpcUrlSafetyError
+  );
+});
+
 test('assertSafeRpcUrl rejects private-network ipv4 address', async () => {
   await assert.rejects(
     assertSafeRpcUrl('https://192.168.1.50:8545'),

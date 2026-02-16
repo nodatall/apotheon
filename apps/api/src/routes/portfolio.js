@@ -1,19 +1,26 @@
 import { Router } from 'express';
 
-export function createPortfolioRouter({ snapshotsRepository }) {
+export function createPortfolioRouter({ snapshotsRepository, scansRepository = null }) {
   const router = Router();
 
   router.get('/dashboard', async (_req, res, next) => {
     try {
-      const payload = await snapshotsRepository.getLatestDashboardPayload();
-      const snapshotStatus = payload.latestSnapshot?.status ?? 'queued';
+      const [snapshotPayload, liveScanPayload] = await Promise.all([
+        snapshotsRepository.getLatestDashboardPayload(),
+        scansRepository?.getLatestDashboardPayloadFromScans
+          ? scansRepository.getLatestDashboardPayloadFromScans()
+          : Promise.resolve(null)
+      ]);
+      const useLiveScans = liveScanPayload?.hasLiveScans === true;
+      const payload = useLiveScans ? liveScanPayload : snapshotPayload;
+      const snapshotStatus = useLiveScans ? 'live_scan' : payload.latestSnapshot?.status ?? 'queued';
       res.json({
         data: {
           ...payload,
           jobs: {
             snapshot: {
               status: snapshotStatus,
-              errorMessage: payload.latestSnapshot?.errorMessage ?? null
+              errorMessage: useLiveScans ? null : payload.latestSnapshot?.errorMessage ?? null
             }
           }
         }
