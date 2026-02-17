@@ -17,7 +17,7 @@ This is a **process gate**
 
 Accepted command:
 
-`start socratic planning for <feature-name>`
+`start planning for <feature-name>`
 
 Optional payload:
 
