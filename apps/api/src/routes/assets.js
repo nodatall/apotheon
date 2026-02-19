@@ -12,7 +12,8 @@ export function createAssetsRouter({
   router.get('/tokens', async (req, res, next) => {
     try {
       const chainId = typeof req.query.chainId === 'string' ? req.query.chainId : null;
-      const tokens = await trackedTokensRepository.listTrackedTokens({ chainId });
+      const includeInactive = req.query.includeInactive === 'true';
+      const tokens = await trackedTokensRepository.listTrackedTokens({ chainId, includeInactive });
       res.json({ data: tokens });
     } catch (error) {
       next(error);
@@ -92,6 +93,28 @@ export function createAssetsRouter({
         return;
       }
 
+      next(error);
+    }
+  });
+
+  router.patch('/tokens/:id/activation', async (req, res, next) => {
+    if (typeof req.body?.isActive !== 'boolean') {
+      res.status(400).json({ error: 'isActive (boolean) is required.' });
+      return;
+    }
+
+    try {
+      const token = await trackedTokensRepository.setTrackedTokenActive(
+        req.params.id,
+        req.body.isActive
+      );
+      if (!token) {
+        res.status(404).json({ error: 'Tracked token not found.' });
+        return;
+      }
+
+      res.json({ data: token });
+    } catch (error) {
       next(error);
     }
   });

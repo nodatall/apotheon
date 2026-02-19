@@ -27,11 +27,21 @@ export const api = {
 
   getWallets: () => request('/api/wallets'),
   createWallet: (body) => request('/api/wallets', { method: 'POST', body }),
+  setWalletActivation: (walletId, isActive) =>
+    request(`/api/wallets/${walletId}/activation`, {
+      method: 'PATCH',
+      body: { isActive }
+    }),
   rescanWallet: (walletId) => request(`/api/wallets/${walletId}/rescan`, { method: 'POST' }),
   getWalletJobStatus: (walletId) => request(`/api/wallets/${walletId}/jobs/status`),
 
   getTokens: () => request('/api/assets/tokens'),
   addToken: (body) => request('/api/assets/tokens', { method: 'POST', body }),
+  setTokenActivation: (tokenId, isActive) =>
+    request(`/api/assets/tokens/${tokenId}/activation`, {
+      method: 'PATCH',
+      body: { isActive }
+    }),
 
   getProtocols: () => request('/api/protocols/contracts'),
   addProtocol: (body) => request('/api/protocols/contracts', { method: 'POST', body }),

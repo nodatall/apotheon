@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import Assets from './pages/Assets.jsx';
 import History from './pages/History.jsx';
+import Wallets from './pages/Wallets.jsx';
 
 const PAGES = [
   { key: 'assets', label: 'Assets', component: Assets },
+  { key: 'wallets', label: 'Wallets', component: Wallets },
   { key: 'history', label: 'History', component: History }
 ];
 

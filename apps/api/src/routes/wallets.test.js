@@ -203,3 +203,33 @@ test('wallets: onboarding-status returns latest scan state and hints', async () 
   assert.equal(body.data.needsUniverseRefresh, true);
   assert.equal(body.data.canRescan, true);
 });
+
+test('wallets: activation endpoint toggles wallet active state', async () => {
+  const baseUrl = await startServer(
+    createWalletsRouter({
+      chainsRepository: {
+        getChainById: async () => ({ id: 'c1', family: 'evm' })
+      },
+      walletsRepository: {
+        setWalletActive: async (id, isActive) => ({ id, chainId: 'c1', isActive })
+      },
+      scansRepository: {
+        getLatestScanByWallet: async () => null
+      },
+      walletScanService: {
+        runScan: async () => ({})
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/wallets/wallet-1/activation`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ isActive: false })
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.id, 'wallet-1');
+  assert.equal(body.data.isActive, false);
+});

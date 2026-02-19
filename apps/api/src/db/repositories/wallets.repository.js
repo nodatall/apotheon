@@ -34,15 +34,16 @@ export function createWalletsRepository({ pool }) {
     return mapWalletRow(rows[0]);
   }
 
-  async function listWallets({ chainId = null } = {}) {
+  async function listWallets({ chainId = null, includeInactive = false } = {}) {
     const { rows } = await pool.query(
       `
         SELECT id, chain_id, address, label, is_active, created_at, updated_at
         FROM wallets
         WHERE ($1::uuid IS NULL OR chain_id = $1)
+          AND ($2::boolean = TRUE OR is_active = TRUE)
         ORDER BY created_at DESC
       `,
-      [chainId]
+      [chainId, includeInactive]
     );
 
     return rows.map(mapWalletRow);
@@ -62,9 +63,24 @@ export function createWalletsRepository({ pool }) {
     return mapWalletRow(rows[0]);
   }
 
+  async function setWalletActive(id, isActive) {
+    const { rows } = await pool.query(
+      `
+        UPDATE wallets
+        SET is_active = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, chain_id, address, label, is_active, created_at, updated_at
+      `,
+      [id, isActive]
+    );
+
+    return mapWalletRow(rows[0]);
+  }
+
   return {
     createWallet,
     getWalletById,
-    listWallets
+    listWallets,
+    setWalletActive
   };
 }

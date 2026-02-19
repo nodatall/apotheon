@@ -40,8 +40,10 @@ export function createWalletsRouter({
 
   router.get('/', async (req, res, next) => {
     try {
+      const includeInactive = req.query.includeInactive === 'true';
       const wallets = await walletsRepository.listWallets({
-        chainId: req.query.chainId ? String(req.query.chainId) : null
+        chainId: req.query.chainId ? String(req.query.chainId) : null,
+        includeInactive
       });
       res.json({ data: wallets });
     } catch (error) {
@@ -131,6 +133,25 @@ export function createWalletsRouter({
         res.status(409).json({ error: error.message });
         return;
       }
+      next(error);
+    }
+  });
+
+  router.patch('/:id/activation', async (req, res, next) => {
+    if (typeof req.body?.isActive !== 'boolean') {
+      res.status(400).json({ error: 'isActive (boolean) is required.' });
+      return;
+    }
+
+    try {
+      const wallet = await walletsRepository.setWalletActive(req.params.id, req.body.isActive);
+      if (!wallet) {
+        res.status(404).json({ error: 'Wallet not found.' });
+        return;
+      }
+
+      res.json({ data: wallet });
+    } catch (error) {
       next(error);
     }
   });

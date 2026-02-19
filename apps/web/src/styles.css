@@ -1,15 +1,14 @@
 :root {
-  --bg: #070b13;
-  --bg-alt: #0d1422;
-  --card: #111b2e;
-  --card-alt: #17243a;
-  --ink: #e8eef9;
-  --muted: #98a7c0;
-  --line: #273852;
-  --accent: #58d4a7;
-  --accent-soft: #1f3f3a;
-  --warning: #f8cd70;
-  --error: #ff7d86;
+  --bg: #11182a;
+  --bg-alt: #1b2336;
+  --card: #252d43;
+  --card-alt: #2a334b;
+  --ink: #ebeff9;
+  --muted: #9ca8c7;
+  --line: #343d5c;
+  --accent: #ff5d7d;
+  --accent-alt: #31c2a6;
+  --error: #ff7f95;
 }
 
 * {
@@ -21,21 +20,28 @@ body {
   color: var(--ink);
   font-family: 'Manrope', 'Avenir Next', 'Segoe UI', sans-serif;
   background:
-    radial-gradient(circle at 10% 0%, #1e3353 0, transparent 36%),
-    radial-gradient(circle at 95% 20%, #193734 0, transparent 32%),
-    linear-gradient(165deg, var(--bg) 0%, var(--bg-alt) 100%);
+    radial-gradient(circle at 12% -6%, #33406a 0, transparent 35%),
+    radial-gradient(circle at 90% 5%, #1f4a44 0, transparent 25%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-alt) 100%);
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
 }
 
 .shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 260px 1fr;
+  grid-template-columns: 250px 1fr;
 }
 
 .sidebar {
   border-right: 1px solid var(--line);
   padding: 1.5rem;
-  background: linear-gradient(180deg, #0f1829 0%, #0b1424 100%);
+  background: linear-gradient(180deg, #1a2339 0%, #151c2f 100%);
 }
 
 .sidebar h1 {
@@ -54,16 +60,17 @@ nav {
 .nav-item {
   text-align: left;
   border: 1px solid var(--line);
-  background: #111c30;
+  background: #1f2942;
   color: var(--ink);
   padding: 0.7rem 0.85rem;
   border-radius: 0.65rem;
   cursor: pointer;
+  font: inherit;
 }
 
 .nav-item.active {
   border-color: var(--accent);
-  background: linear-gradient(135deg, #214437 0%, #1b2c47 100%);
+  background: linear-gradient(135deg, #372943 0%, #1f2f4b 100%);
 }
 
 .content {
@@ -80,10 +87,10 @@ nav {
 .card {
   grid-column: span 6;
   border: 1px solid var(--line);
-  border-radius: 0.75rem;
+  border-radius: 0.8rem;
   background: linear-gradient(160deg, var(--card) 0%, var(--card-alt) 100%);
   padding: 1rem;
-  box-shadow: 0 12px 24px rgb(1 5 10 / 22%);
+  box-shadow: 0 14px 30px rgb(3 8 18 / 24%);
 }
 
 .hero {
@@ -91,9 +98,10 @@ nav {
 }
 
 .metric {
-  font-size: 2.2rem;
-  margin: 0.3rem 0;
+  font-size: 2rem;
+  margin: 0.2rem 0;
   font-family: 'Sora', 'Manrope', sans-serif;
+  line-height: 1.15;
 }
 
 .muted {
@@ -112,15 +120,20 @@ nav {
 
 .table th,
 .table td {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid #303955;
   text-align: left;
-  padding: 0.5rem 0.25rem;
-  font-size: 0.9rem;
+  padding: 0.7rem 0.5rem;
+  font-size: 0.92rem;
 }
 
 .table th {
   color: var(--muted);
   font-weight: 600;
+  background: #2a3148;
+}
+
+.table-right {
+  text-align: right !important;
 }
 
 .form {
@@ -136,7 +149,7 @@ button {
   border-radius: 0.55rem;
   border: 1px solid var(--line);
   padding: 0.6rem 0.7rem;
-  background: #0e1729;
+  background: #1a2236;
   color: var(--ink);
 }
 
@@ -145,7 +158,7 @@ button {
 }
 
 button:hover {
-  border-color: var(--accent);
+  border-color: var(--accent-alt);
 }
 
 button:disabled {
@@ -153,10 +166,107 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.primary-button {
+  background: linear-gradient(140deg, #e45579 0%, #f0728d 100%);
+  color: #fff;
+  border-color: #f0728d;
+}
+
+.ghost-button {
+  background: #1a2236;
+  border-color: #49506d;
+}
+
+.danger-button {
+  background: #4a2534;
+  border-color: #a34b63;
+}
+
+.icon-button {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 1.2rem;
+}
+
 .button-row {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  margin-top: 0.3rem;
+}
+
+.asset-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.asset-toolbar-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.45rem;
+}
+
+.assets-table thead th {
+  font-size: 0.86rem;
+}
+
+.assets-table td {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.token-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.token-avatar {
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.token-symbol {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(10 14 24 / 70%);
+  display: grid;
+  place-items: center;
+  z-index: 25;
+  padding: 1rem;
+}
+
+.modal-panel {
+  width: min(560px, 100%);
+  border-radius: 0.9rem;
+  border: 1px solid #475272;
+  background: linear-gradient(165deg, #232d45 0%, #1d273d 100%);
+  padding: 1rem;
+  box-shadow: 0 20px 50px rgb(3 8 18 / 45%);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 0.8rem;
 }
 
@@ -166,14 +276,14 @@ button:disabled {
   padding: 0.25rem 0.65rem;
   font-size: 0.8rem;
   border: 1px solid transparent;
-  background: #223149;
+  background: #2d3653;
 }
 
 .pill-success,
 .pill-ready,
 .pill-valid {
-  background: #1e4d40;
-  border-color: #2f785e;
+  background: #215141;
+  border-color: #2f7c63;
 }
 
 .pill-failed,
@@ -195,7 +305,7 @@ button:disabled {
   font-size: 0.76rem;
   overflow: auto;
   max-height: 140px;
-  background: #0b1424;
+  background: #151d31;
   border: 1px solid var(--line);
   border-radius: 0.45rem;
   padding: 0.55rem;
@@ -205,6 +315,25 @@ button:disabled {
   display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
+}
+
+.sparkline {
+  height: 86px;
+  display: flex;
+  gap: 0.28rem;
+  align-items: end;
+  margin-bottom: 0.8rem;
+  padding: 0.5rem;
+  border: 1px solid #3a4566;
+  border-radius: 0.55rem;
+  background: #202a41;
+}
+
+.sparkline span {
+  flex: 1;
+  min-height: 2px;
+  border-radius: 0.25rem 0.25rem 0 0;
+  background: linear-gradient(180deg, #f0728d 0%, #31c2a6 100%);
 }
 
 @keyframes fade-up {
@@ -219,6 +348,12 @@ button:disabled {
   }
 }
 
+@media (max-width: 1100px) {
+  .card {
+    grid-column: span 12;
+  }
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
@@ -229,7 +364,18 @@ button:disabled {
     border-bottom: 1px solid var(--line);
   }
 
-  .card {
-    grid-column: span 12;
+  .asset-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .asset-toolbar-side {
+    align-items: flex-start;
+  }
+
+  .table th,
+  .table td {
+    font-size: 0.85rem;
+    padding: 0.55rem 0.35rem;
   }
 }

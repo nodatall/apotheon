@@ -125,3 +125,39 @@ test('assets: rejects walletId that does not belong to chainId', async () => {
   const body = await response.json();
   assert.match(body.error, /walletId must belong to the provided chainId/i);
 });
+
+test('assets: activation endpoint toggles tracked token active state', async () => {
+  const baseUrl = await startServer(
+    createAssetsRouter({
+      chainsRepository: {
+        getChainById: async (chainId) => ({ id: chainId, family: 'evm' })
+      },
+      walletsRepository: {
+        getWalletById: async (walletId) => ({ id: walletId, chainId: 'chain-1' })
+      },
+      manualTokenService: {
+        registerManualToken: async () => ({})
+      },
+      walletScanService: {
+        rescanWallet: async () => ({})
+      },
+      trackedTokensRepository: {
+        listTrackedTokens: async () => [],
+        setTrackedTokenActive: async (id, isActive) => ({ id, isActive })
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/assets/tokens/token-1/activation`, {
+    method: 'PATCH',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({ isActive: false })
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.id, 'token-1');
+  assert.equal(body.data.isActive, false);
+});

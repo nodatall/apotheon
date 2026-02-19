@@ -52,7 +52,7 @@ export function createTrackedTokensRepository({ pool }) {
     return mapTrackedTokenRow(rows[0]);
   }
 
-  async function listTrackedTokens({ chainId = null } = {}) {
+  async function listTrackedTokens({ chainId = null, includeInactive = false } = {}) {
     const { rows } = await pool.query(
       `
         SELECT
@@ -60,16 +60,34 @@ export function createTrackedTokensRepository({ pool }) {
           metadata_source, tracking_source, is_active, created_at, updated_at
         FROM tracked_tokens
         WHERE ($1::uuid IS NULL OR chain_id = $1)
+          AND ($2::boolean = TRUE OR is_active = TRUE)
         ORDER BY created_at DESC
       `,
-      [chainId]
+      [chainId, includeInactive]
     );
 
     return rows.map(mapTrackedTokenRow);
   }
 
+  async function setTrackedTokenActive(id, isActive) {
+    const { rows } = await pool.query(
+      `
+        UPDATE tracked_tokens
+        SET is_active = $2, updated_at = NOW()
+        WHERE id = $1
+        RETURNING
+          id, chain_id, contract_or_mint, symbol, name, decimals,
+          metadata_source, tracking_source, is_active, created_at, updated_at
+      `,
+      [id, isActive]
+    );
+
+    return mapTrackedTokenRow(rows[0]);
+  }
+
   return {
     listTrackedTokens,
+    setTrackedTokenActive,
     upsertTrackedToken
   };
 }
