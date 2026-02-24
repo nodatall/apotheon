@@ -218,3 +218,70 @@ test('auto-track: solana native asset uses 9 decimals in scan token metadata', a
   await service.runScan({ walletId: 'wallet-sol' });
   assert.equal(seenNativeDecimals, 9);
 });
+
+test('auto-track: polygon native mapped contract alias is deduped into a single POL native row', async () => {
+  let scannedContracts = [];
+  const upsertedItems = [];
+  const autoTrackedContracts = [];
+
+  const service = createWalletScanService({
+    chainsRepository: {
+      getChainById: async () => ({ id: 'chain-polygon', slug: 'polygon', family: 'evm' })
+    },
+    walletsRepository: {
+      getWalletById: async () => ({ id: 'wallet-poly-1', chainId: 'chain-polygon', address: '0xabc' })
+    },
+    tokenUniverseRepository: {
+      getLatestScanEligibleSnapshot: async () => ({ id: 'snapshot-poly-1' }),
+      getSnapshotItems: async () => [
+        {
+          contractOrMint: '0x0000000000000000000000000000000000001010',
+          symbol: 'POL'
+        }
+      ]
+    },
+    scansRepository: {
+      createScanRun: async (input) => ({ id: 'scan-poly-1', ...input }),
+      updateScanRun: async (id, changes) => ({ id, ...changes }),
+      upsertScanItem: async (item) => {
+        upsertedItems.push(item);
+        return item;
+      }
+    },
+    trackedTokensRepository: {
+      listTrackedTokens: async () => [
+        {
+          id: 'token-poly-alias',
+          chainId: 'chain-polygon',
+          contractOrMint: '0x0000000000000000000000000000000000001010',
+          symbol: 'MATIC'
+        }
+      ],
+      upsertTrackedToken: async ({ contractOrMint }) => {
+        autoTrackedContracts.push(contractOrMint);
+        return { id: `token-${contractOrMint}` };
+      }
+    },
+    balanceBatcher: {
+      resolveBalances: async ({ tokens }) => {
+        scannedContracts = tokens.map((token) => token.contractOrMint);
+        return [
+          {
+            contractOrMint: 'native:polygon',
+            balanceRaw: '1',
+            balanceNormalized: 1,
+            valuationContractOrMint: '0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270'
+          }
+        ];
+      }
+    }
+  });
+
+  const outcome = await service.runScan({ walletId: 'wallet-poly-1' });
+
+  assert.equal(outcome.autoTrackedCount, 1);
+  assert.deepEqual(scannedContracts, ['native:polygon']);
+  assert.deepEqual(autoTrackedContracts, ['native:polygon']);
+  assert.equal(upsertedItems.length, 1);
+  assert.equal(upsertedItems[0].contractOrMint, 'native:polygon');
+});

@@ -18,6 +18,28 @@ function resolveCoinGeckoPlatform(chain) {
   return platformBySlug[chain.slug] ?? null;
 }
 
+function resolveNativeCoinId(chain) {
+  if (chain.family === 'solana') {
+    return 'solana';
+  }
+
+  if (chain.family !== 'evm') {
+    return null;
+  }
+
+  const coinIdBySlug = {
+    ethereum: 'ethereum',
+    arbitrum: 'ethereum',
+    base: 'ethereum',
+    optimism: 'ethereum',
+    polygon: 'matic-network',
+    bsc: 'binancecoin',
+    avalanche: 'avalanche-2'
+  };
+
+  return coinIdBySlug[chain.slug] ?? 'ethereum';
+}
+
 function normalizeAddress(address) {
   if (typeof address !== 'string') {
     return null;
@@ -226,8 +248,96 @@ export function createCoinGeckoClient({
     return prices;
   }
 
+  async function getTokenImagesByContracts({ chain, contracts }) {
+    const platform = resolveCoinGeckoPlatform(chain);
+    if (!platform || !Array.isArray(contracts) || contracts.length === 0) {
+      return {};
+    }
+
+    const normalizedContracts = [
+      ...new Set(
+        contracts
+          .map((contract) => normalizeAddress(contract))
+          .filter((contract) => Boolean(contract))
+          .map((contract) => (chain.family === 'evm' ? contract.toLowerCase() : contract))
+      )
+    ];
+
+    const pairs = await mapWithConcurrency(
+      normalizedContracts,
+      async (contract) => {
+        try {
+          const url = createApiUrl(baseUrl, `/coins/${platform}/contract/${encodeURIComponent(contract)}`);
+          url.searchParams.set('localization', 'false');
+          url.searchParams.set('tickers', 'false');
+          url.searchParams.set('market_data', 'false');
+          url.searchParams.set('community_data', 'false');
+          url.searchParams.set('developer_data', 'false');
+          url.searchParams.set('sparkline', 'false');
+
+          const body = await requestJson(url);
+          const imageUrl =
+            typeof body?.image?.small === 'string'
+              ? body.image.small
+              : typeof body?.image?.thumb === 'string'
+                ? body.image.thumb
+                : typeof body?.image?.large === 'string'
+                  ? body.image.large
+                  : null;
+
+          return [contract, imageUrl];
+        } catch (_error) {
+          return [contract, null];
+        }
+      },
+      Math.min(platformFetchConcurrency, 6)
+    );
+
+    const images = {};
+    for (const [contract, imageUrl] of pairs) {
+      if (typeof imageUrl === 'string' && imageUrl.length > 0) {
+        images[contract] = imageUrl;
+      }
+    }
+
+    return images;
+  }
+
+  async function getNativeCoinImage({ chain }) {
+    const coinId = resolveNativeCoinId(chain);
+    if (!coinId) {
+      return null;
+    }
+
+    const url = createApiUrl(baseUrl, `/coins/${coinId}`);
+    url.searchParams.set('localization', 'false');
+    url.searchParams.set('tickers', 'false');
+    url.searchParams.set('market_data', 'false');
+    url.searchParams.set('community_data', 'false');
+    url.searchParams.set('developer_data', 'false');
+    url.searchParams.set('sparkline', 'false');
+
+    try {
+      const body = await requestJson(url);
+      if (typeof body?.image?.small === 'string' && body.image.small.length > 0) {
+        return body.image.small;
+      }
+      if (typeof body?.image?.thumb === 'string' && body.image.thumb.length > 0) {
+        return body.image.thumb;
+      }
+      if (typeof body?.image?.large === 'string' && body.image.large.length > 0) {
+        return body.image.large;
+      }
+      return null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   return {
     fetchTopTokens,
-    getPricesByContracts
+    getPricesByContracts,
+    getTokenImagesByContracts,
+    getNativeCoinImage
   };
 }

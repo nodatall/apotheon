@@ -56,6 +56,18 @@ export const api = {
   getSnapshotJobStatus: () => request('/api/snapshots/jobs/status'),
 
   getHistory: () => request('/api/portfolio/history'),
-  getDashboard: () => request('/api/portfolio/dashboard'),
+  getDashboard: ({ walletIds = [] } = {}) => {
+    const normalizedWalletIds = Array.isArray(walletIds)
+      ? walletIds
+          .map((walletId) => (typeof walletId === 'string' ? walletId.trim() : ''))
+          .filter((walletId) => walletId.length > 0)
+      : [];
+    const query = new URLSearchParams();
+    if (normalizedWalletIds.length > 0) {
+      query.set('walletIds', normalizedWalletIds.join(','));
+    }
+    const suffix = query.toString();
+    return request(`/api/portfolio/dashboard${suffix ? `?${suffix}` : ''}`);
+  },
   getWalletOnboardingStatus: (walletId) => request(`/api/wallets/${walletId}/onboarding-status`)
 };

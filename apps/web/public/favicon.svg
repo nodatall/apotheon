@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1E1934" />
+      <stop offset="1" stop-color="#100E1B" />
+    </linearGradient>
+    <linearGradient id="glass" x1="18" y1="12" x2="46" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8B9FF" />
+      <stop offset="1" stop-color="#8B7EFF" />
+    </linearGradient>
+    <linearGradient id="liquid" x1="20" y1="36" x2="44" y2="52" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9D93FF" />
+      <stop offset="1" stop-color="#6E63FF" />
+    </linearGradient>
+  </defs>
+
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#bg)" />
+  <rect x="24" y="11.5" width="16" height="7" rx="3.5" fill="#BEB0FF" />
+  <rect x="27.5" y="17.5" width="9" height="8" rx="3" fill="url(#glass)" />
+  <path
+    d="M19 24.5h26v3.2l-5.7 8.3c-1 1.4-1.5 3-1.5 4.7v2.7c0 0.9 0.7 1.6 1.6 1.6h1.2c3.7 0 6.8 3 6.8 6.8v0.7c0 1-0.8 1.8-1.8 1.8H18.4c-1 0-1.8-0.8-1.8-1.8v-0.7c0-3.8 3.1-6.8 6.8-6.8h1.2c0.9 0 1.6-0.7 1.6-1.6v-2.7c0-1.7-0.5-3.3-1.5-4.7L19 27.7v-3.2z"
+    fill="url(#glass)"
+  />
+  <path
+    d="M21 45h22c2 0 3.6 1.6 3.6 3.6v3.2H17.4v-3.2c0-2 1.6-3.6 3.6-3.6z"
+    fill="url(#liquid)"
+  />
+  <rect x="26.2" y="33.5" width="11.6" height="2.1" rx="1.05" fill="#D6CBFF" opacity="0.75" />
+</svg>

@@ -155,7 +155,25 @@ export function createSnapshotsRepository({ pool }) {
       `
         SELECT
           ds.snapshot_date_utc,
-          COALESCE(SUM(si.usd_value), 0) AS total_usd_value
+          COALESCE(SUM(si.usd_value), 0) AS total_usd_value,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN si.asset_type = 'token' THEN si.usd_value
+                ELSE 0
+              END
+            ),
+            0
+          ) AS token_usd_value,
+          COALESCE(
+            SUM(
+              CASE
+                WHEN si.asset_type = 'protocol_position' THEN si.usd_value
+                ELSE 0
+              END
+            ),
+            0
+          ) AS protocol_usd_value
         FROM daily_snapshots ds
         LEFT JOIN snapshot_items si ON si.snapshot_id = ds.id
         WHERE ($1::date IS NULL OR ds.snapshot_date_utc >= $1)
@@ -168,7 +186,9 @@ export function createSnapshotsRepository({ pool }) {
 
     return rows.map((row) => ({
       snapshotDateUtc: row.snapshot_date_utc,
-      totalUsdValue: Number(row.total_usd_value)
+      totalUsdValue: Number(row.total_usd_value),
+      tokenUsdValue: Number(row.token_usd_value),
+      protocolUsdValue: Number(row.protocol_usd_value)
     }));
   }
 
@@ -194,6 +214,8 @@ export function createSnapshotsRepository({ pool }) {
         SELECT
           si.id AS snapshot_item_id,
           si.wallet_id,
+          w.chain_id AS wallet_chain_id,
+          w.is_active AS wallet_is_active,
           si.asset_type,
           si.asset_ref_id,
           si.symbol,
@@ -201,9 +223,17 @@ export function createSnapshotsRepository({ pool }) {
           si.usd_price,
           si.usd_value,
           si.valuation_status,
+          tt.chain_id AS token_chain_id,
+          tt.contract_or_mint AS token_contract_or_mint,
+          tt.is_active AS token_is_active,
           pc.label AS protocol_label,
           pc.category AS protocol_category
         FROM snapshot_items si
+        LEFT JOIN wallets w
+          ON si.wallet_id = w.id
+        LEFT JOIN tracked_tokens tt
+          ON si.asset_type = 'token'
+          AND si.asset_ref_id = tt.id
         LEFT JOIN protocol_contracts pc
           ON si.asset_type = 'protocol_position'
           AND si.asset_ref_id = pc.id
@@ -222,6 +252,17 @@ export function createSnapshotsRepository({ pool }) {
     const protocols = [];
 
     for (const row of rows) {
+      const isWalletScoped = row.wallet_id !== null && row.wallet_id !== undefined;
+      if (isWalletScoped && row.wallet_is_active === false) {
+        continue;
+      }
+
+      const isTokenRow = row.asset_type === 'token';
+      const hasTrackedTokenRef = row.asset_ref_id !== null && row.asset_ref_id !== undefined;
+      if (isTokenRow && hasTrackedTokenRef && row.token_is_active === false) {
+        continue;
+      }
+
       const usdValue = toNumberOrNull(row.usd_value);
       const usdPrice = toNumberOrNull(row.usd_price);
       const quantity = Number(row.quantity);
@@ -247,7 +288,9 @@ export function createSnapshotsRepository({ pool }) {
         tokens.push({
           snapshotItemId: row.snapshot_item_id,
           walletId: row.wallet_id,
+          chainId: row.token_chain_id ?? row.wallet_chain_id ?? null,
           assetRefId: row.asset_ref_id,
+          contractOrMint: row.token_contract_or_mint ?? null,
           symbol: row.symbol,
           quantity,
           usdPrice,

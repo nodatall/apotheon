@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { isWalletUniqueViolation } from '../db/repositories/wallets.repository.js';
 import { normalizeAddressForChain } from '../services/shared/address-normalization.js';
 
+const ALL_CHAINS_SELECTOR = '__all__';
+
 function isEvmAddress(address) {
   return /^0x[a-fA-F0-9]{40}$/.test(address);
 }
@@ -30,6 +32,146 @@ function deriveOnboardingHints({ scanStatus, scanError }) {
   };
 }
 
+async function runInitialWalletScan({ walletScanService, wallet }) {
+  let scan = null;
+  let scanError = null;
+  try {
+    scan = await walletScanService.runScan({ walletId: wallet.id });
+  } catch (error) {
+    scanError = error instanceof Error ? error.message : String(error);
+  }
+
+  const scanStatus = scan?.scanRun?.status ?? 'failed';
+  const onboardingHints = deriveOnboardingHints({ scanStatus, scanError });
+
+  return {
+    ...wallet,
+    walletUniverseScanId: scan?.scanRun?.id ?? null,
+    universeSnapshotId: scan?.universeSnapshotId ?? null,
+    heldTokenCount: typeof scan?.heldTokenCount === 'number' ? scan.heldTokenCount : null,
+    scanStatus,
+    scanError,
+    ...onboardingHints
+  };
+}
+
+async function ensureWalletForChain({ walletsRepository, chainId, address, label }) {
+  const existingWallet = walletsRepository.getWalletByChainAndAddress
+    ? await walletsRepository.getWalletByChainAndAddress(chainId, address)
+    : null;
+  if (existingWallet) {
+    if (existingWallet.isActive) {
+      return { wallet: existingWallet, action: 'already_active' };
+    }
+
+    const restoredWallet = walletsRepository.reactivateWallet
+      ? await walletsRepository.reactivateWallet(existingWallet.id, { label })
+      : null;
+    if (!restoredWallet) {
+      throw new Error('Failed to reactivate wallet.');
+    }
+    return { wallet: restoredWallet, action: 'restored' };
+  }
+
+  const wallet = await walletsRepository.createWallet({
+    chainId,
+    address,
+    label
+  });
+  return { wallet, action: 'created' };
+}
+
+async function addAddressAcrossChains({
+  chainsRepository,
+  walletsRepository,
+  walletScanService,
+  rawAddress,
+  label
+}) {
+  const allChains = chainsRepository.listChains ? await chainsRepository.listChains() : [];
+  const activeChains = allChains.filter((chain) => chain?.isActive === true);
+  const added = [];
+  const skipped = [];
+
+  for (const chain of activeChains) {
+    if (!validateAddressForChain(chain.family, rawAddress)) {
+      skipped.push({
+        chainId: chain.id,
+        chainName: chain.name,
+        reason: 'invalid_address_format'
+      });
+      continue;
+    }
+
+    const normalizedAddress = normalizeAddressForChain({
+      family: chain.family,
+      address: rawAddress
+    });
+    if (!normalizedAddress) {
+      skipped.push({
+        chainId: chain.id,
+        chainName: chain.name,
+        reason: 'invalid_address_format'
+      });
+      continue;
+    }
+
+    const ensured = await ensureWalletForChain({
+      walletsRepository,
+      chainId: chain.id,
+      address: normalizedAddress,
+      label
+    });
+    if (ensured.action === 'already_active') {
+      skipped.push({
+        chainId: chain.id,
+        chainName: chain.name,
+        reason: 'already_tracked'
+      });
+      continue;
+    }
+
+    const payload = await runInitialWalletScan({
+      walletScanService,
+      wallet: ensured.wallet
+    });
+
+    if (payload.scanStatus === 'failed') {
+      if (walletsRepository.setWalletActive) {
+        await walletsRepository.setWalletActive(ensured.wallet.id, false);
+      }
+      skipped.push({
+        chainId: chain.id,
+        chainName: chain.name,
+        reason: 'scan_failed',
+        error: payload.scanError
+      });
+      continue;
+    }
+
+    if ((payload.heldTokenCount ?? 0) <= 0) {
+      if (walletsRepository.setWalletActive) {
+        await walletsRepository.setWalletActive(ensured.wallet.id, false);
+      }
+      skipped.push({
+        chainId: chain.id,
+        chainName: chain.name,
+        reason: 'no_token_balances'
+      });
+      continue;
+    }
+
+    added.push(payload);
+  }
+
+  return {
+    address: rawAddress,
+    checkedChainCount: activeChains.length,
+    added,
+    skipped
+  };
+}
+
 export function createWalletsRouter({
   chainsRepository,
   walletsRepository,
@@ -55,13 +197,26 @@ export function createWalletsRouter({
     const chainId = typeof req.body?.chainId === 'string' ? req.body.chainId.trim() : '';
     const rawAddress = typeof req.body?.address === 'string' ? req.body.address.trim() : '';
     const label = typeof req.body?.label === 'string' ? req.body.label.trim() : null;
+    const isAllChainsRequest = chainId === ALL_CHAINS_SELECTOR;
 
-    if (!chainId || !rawAddress) {
+    if ((!chainId && !isAllChainsRequest) || !rawAddress) {
       res.status(400).json({ error: 'chainId and address are required.' });
       return;
     }
 
     try {
+      if (isAllChainsRequest) {
+        const summary = await addAddressAcrossChains({
+          chainsRepository,
+          walletsRepository,
+          walletScanService,
+          rawAddress,
+          label
+        });
+        res.status(200).json({ data: summary });
+        return;
+      }
+
       const chain = await chainsRepository.getChainById(chainId);
       if (!chain) {
         res.status(400).json({ error: 'Unknown chainId.' });
@@ -78,32 +233,23 @@ export function createWalletsRouter({
         address: rawAddress
       });
 
-      const wallet = await walletsRepository.createWallet({
+      const ensured = await ensureWalletForChain({
+        walletsRepository,
         chainId,
         address: normalizedAddress,
         label
       });
-
-      let scan = null;
-      let scanError = null;
-      try {
-        scan = await walletScanService.runScan({ walletId: wallet.id });
-      } catch (error) {
-        scanError = error instanceof Error ? error.message : String(error);
+      if (ensured.action === 'already_active') {
+        res.status(409).json({ error: 'Wallet already exists for this chain.' });
+        return;
       }
-      const scanStatus = scan?.scanRun?.status ?? 'failed';
-      const onboardingHints = deriveOnboardingHints({ scanStatus, scanError });
 
-      res.status(201).json({
-        data: {
-          ...wallet,
-          walletUniverseScanId: scan?.scanRun?.id ?? null,
-          universeSnapshotId: scan?.universeSnapshotId ?? null,
-          scanStatus,
-          scanError,
-          ...onboardingHints
-        }
-      });
+      const payload = await runInitialWalletScan({ walletScanService, wallet: ensured.wallet });
+      if (ensured.action === 'restored') {
+        res.status(200).json({ data: payload });
+        return;
+      }
+      res.status(201).json({ data: payload });
     } catch (error) {
       if (isWalletUniqueViolation(error)) {
         res.status(409).json({ error: 'Wallet already exists for this chain.' });

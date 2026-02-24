@@ -186,3 +186,29 @@ test('runtime env reports incompatible CoinGecko base URL and key mode', () => {
       /incompatible with pro-api\.coingecko\.com/i.test(error.message)
   );
 });
+
+test('CoinGecko client resolves native coin image by chain mapping', async () => {
+  const calls = [];
+  const client = createCoinGeckoClient({
+    apiKey: 'test-key',
+    fetchImpl: async (url) => {
+      const fullUrl = String(url);
+      calls.push(fullUrl);
+      return {
+        ok: true,
+        json: async () => ({
+          image: {
+            small: 'https://icons.example/binancecoin.png'
+          }
+        })
+      };
+    }
+  });
+
+  const imageUrl = await client.getNativeCoinImage({
+    chain: { slug: 'bsc', family: 'evm' }
+  });
+
+  assert.equal(imageUrl, 'https://icons.example/binancecoin.png');
+  assert.ok(calls.some((url) => url.includes('/coins/binancecoin')));
+});

@@ -27,8 +27,9 @@ const EVM_NATIVE_ASSETS = {
     wrappedContract: '0x4200000000000000000000000000000000000006'
   },
   polygon: {
-    symbol: 'MATIC',
-    wrappedContract: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270'
+    symbol: 'POL',
+    wrappedContract: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
+    aliasContracts: ['0x0000000000000000000000000000000000001010']
   },
   bsc: {
     symbol: 'BNB',
@@ -84,6 +85,16 @@ function buildNativeScanToken(chain) {
         address: native.wrappedContract
       })
     : nativeRef;
+  const aliasContracts = Array.isArray(native.aliasContracts)
+    ? native.aliasContracts
+        .map((address) =>
+          normalizeAddressForChain({
+            family: chain.family,
+            address
+          })
+        )
+        .filter((address) => address && address !== nativeRef)
+    : [];
 
   return {
     contractOrMint: nativeRef,
@@ -92,7 +103,8 @@ function buildNativeScanToken(chain) {
     decimals: Number.isInteger(native.decimals) ? native.decimals : 18,
     trackedTokenId: null,
     isNative: true,
-    valuationContractOrMint
+    valuationContractOrMint,
+    aliasContracts
   };
 }
 
@@ -156,11 +168,15 @@ export function createWalletScanService({
     const merged = new Map();
 
     const nativeToken = buildNativeScanToken(chain);
+    const nativeAliasContracts = new Set();
     if (nativeToken) {
       merged.set(
         nativeToken.contractOrMint,
         mergeTokenMetadata(merged.get(nativeToken.contractOrMint), nativeToken)
       );
+      for (const alias of nativeToken.aliasContracts ?? []) {
+        nativeAliasContracts.add(alias);
+      }
     }
 
     for (const item of universeItems) {
@@ -169,6 +185,9 @@ export function createWalletScanService({
         address: item.contractOrMint
       });
       if (!normalizedContract) {
+        continue;
+      }
+      if (nativeAliasContracts.has(normalizedContract)) {
         continue;
       }
 
@@ -192,6 +211,9 @@ export function createWalletScanService({
         address: tracked.contractOrMint
       });
       if (!normalizedContract) {
+        continue;
+      }
+      if (nativeAliasContracts.has(normalizedContract)) {
         continue;
       }
 
@@ -311,6 +333,7 @@ export function createWalletScanService({
 
       let autoTrackedCount = 0;
       let unknownValuationCount = 0;
+      let heldTokenCount = 0;
       for (const balance of balances) {
         const normalizedContract = normalizeAddressForChain({
           family: chain.family,
@@ -321,6 +344,9 @@ export function createWalletScanService({
         }
         const tokenMetadata = scanTokensByAddress.get(normalizedContract);
         const heldFlag = Number(balance.balanceNormalized) > 0;
+        if (heldFlag) {
+          heldTokenCount += 1;
+        }
         let tokenId = tokenMetadata?.trackedTokenId ?? null;
         let autoTrackedFlag = false;
 
@@ -370,6 +396,7 @@ export function createWalletScanService({
       return {
         scanRun: completedRun,
         autoTrackedCount,
+        heldTokenCount,
         universeSnapshotId: snapshot.id
       };
     } catch (error) {

@@ -26,6 +26,7 @@ import { createProtocolContractService } from './services/protocols/protocol-con
 import { createProtocolPositionResolver } from './services/protocols/protocol-position-resolver.js';
 import { createDailySnapshotService } from './services/snapshots/daily-snapshot.service.js';
 import { createManualTokenService } from './services/tokens/manual-token.service.js';
+import { createTokenIconService } from './services/tokens/token-icon.service.js';
 import { createValuationService } from './services/valuation/valuation.service.js';
 import { createBalanceBatcher } from './services/wallet-scan/balance-batcher.js';
 import { createEvmBalanceResolver } from './services/wallet-scan/evm-balance-resolver.js';
@@ -78,6 +79,10 @@ export function createApp({
       coingeckoClient
     });
   const valuationService = createValuationService({
+    coingeckoClient
+  });
+  const tokenIconService = createTokenIconService({
+    chainsRepository: resolvedChainsRepository,
     coingeckoClient
   });
   const resolvedWalletScanService =
@@ -164,7 +169,8 @@ export function createApp({
     '/api/portfolio',
     createPortfolioRouter({
       snapshotsRepository: resolvedSnapshotsRepository,
-      scansRepository: resolvedScansRepository
+      scansRepository: resolvedScansRepository,
+      tokenIconService
     })
   );
 

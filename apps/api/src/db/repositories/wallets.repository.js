@@ -63,6 +63,38 @@ export function createWalletsRepository({ pool }) {
     return mapWalletRow(rows[0]);
   }
 
+  async function getWalletByChainAndAddress(chainId, address) {
+    const { rows } = await pool.query(
+      `
+        SELECT id, chain_id, address, label, is_active, created_at, updated_at
+        FROM wallets
+        WHERE chain_id = $1
+          AND address = $2
+        LIMIT 1
+      `,
+      [chainId, address]
+    );
+
+    return mapWalletRow(rows[0]);
+  }
+
+  async function reactivateWallet(id, { label = null } = {}) {
+    const { rows } = await pool.query(
+      `
+        UPDATE wallets
+        SET
+          is_active = TRUE,
+          label = COALESCE($2, label),
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, chain_id, address, label, is_active, created_at, updated_at
+      `,
+      [id, label]
+    );
+
+    return mapWalletRow(rows[0]);
+  }
+
   async function setWalletActive(id, isActive) {
     const { rows } = await pool.query(
       `
@@ -79,8 +111,10 @@ export function createWalletsRepository({ pool }) {
 
   return {
     createWallet,
+    getWalletByChainAndAddress,
     getWalletById,
     listWallets,
+    reactivateWallet,
     setWalletActive
   };
 }

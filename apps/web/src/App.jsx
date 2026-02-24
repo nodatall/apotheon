@@ -5,7 +5,7 @@ import Wallets from './pages/Wallets.jsx';
 
 const PAGES = [
   { key: 'assets', label: 'Assets', component: Assets },
-  { key: 'wallets', label: 'Wallets', component: Wallets },
+  { key: 'wallets', label: 'Addresses', component: Wallets },
   { key: 'history', label: 'History', component: History }
 ];
 
@@ -21,7 +21,6 @@ export default function App() {
     <main className="shell">
       <aside className="sidebar">
         <h1>Apotheon</h1>
-        <p className="muted">Single-owner operations console</p>
         <nav>
           {PAGES.map((page) => (
             <button

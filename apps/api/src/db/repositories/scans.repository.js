@@ -200,6 +200,8 @@ export function createScansRepository({ pool }) {
           wusi.id AS scan_item_id,
           lws.id AS scan_id,
           lws.wallet_id,
+          w.chain_id AS chain_id,
+          w.is_active AS wallet_is_active,
           lws.finished_at AS scan_finished_at,
           w.address AS wallet_address,
           wusi.token_id,
@@ -207,7 +209,8 @@ export function createScansRepository({ pool }) {
           wusi.balance_normalized,
           wusi.usd_value,
           wusi.valuation_status,
-          tt.symbol AS tracked_symbol
+          tt.symbol AS tracked_symbol,
+          tt.is_active AS token_is_active
         FROM latest_wallet_scans lws
         JOIN wallets w ON w.id = lws.wallet_id
         JOIN wallet_universe_scan_items wusi ON wusi.scan_id = lws.id
@@ -222,6 +225,15 @@ export function createScansRepository({ pool }) {
     const tokens = [];
 
     for (const row of rows) {
+      if (row.wallet_is_active === false) {
+        continue;
+      }
+
+      const hasTrackedTokenId = row.token_id !== null && row.token_id !== undefined;
+      if (hasTrackedTokenId && row.token_is_active === false) {
+        continue;
+      }
+
       const quantity = Number(row.balance_normalized);
       const usdValue = toNumberOrNull(row.usd_value);
       const usdPrice =
@@ -237,6 +249,7 @@ export function createScansRepository({ pool }) {
         snapshotItemId: row.scan_item_id,
         scanId: row.scan_id,
         walletId: row.wallet_id,
+        chainId: row.chain_id,
         walletAddress: row.wallet_address,
         assetRefId: row.token_id,
         contractOrMint: row.contract_or_mint,
