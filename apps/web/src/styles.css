@@ -123,6 +123,38 @@ p {
   font-size: 0.92rem;
 }
 
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  border: 1px solid hsl(var(--heroui-default-300));
+  background: hsl(var(--heroui-default-200));
+  color: hsl(var(--heroui-foreground));
+}
+
+.pill-success,
+.pill-ready,
+.pill-valid {
+  border-color: hsl(var(--heroui-success-500));
+  background: color-mix(in srgb, hsl(var(--heroui-success-500)) 22%, transparent);
+}
+
+.pill-failed,
+.pill-invalid {
+  border-color: hsl(var(--heroui-danger-500));
+  background: color-mix(in srgb, hsl(var(--heroui-danger-500)) 20%, transparent);
+}
+
+.pill-partial,
+.pill-running,
+.pill-queued,
+.pill-not_started {
+  border-color: hsl(var(--heroui-warning-500));
+  background: color-mix(in srgb, hsl(var(--heroui-warning-500)) 20%, transparent);
+}
+
 .meta {
   margin: 0;
   font-size: 0.76rem;
@@ -289,27 +321,6 @@ p {
   width: 100%;
   height: auto;
   display: block;
-}
-
-.history-tooltip {
-  position: absolute;
-  transform: translate(-50%, -100%);
-  min-width: 180px;
-  border: 1px solid var(--ap-border-strong);
-  border-radius: 0.55rem;
-  background: color-mix(in srgb, var(--ap-background) 92%, transparent);
-  box-shadow: 0 10px 24px rgb(0 0 0 / 35%);
-  padding: 0.5rem 0.65rem;
-  pointer-events: none;
-}
-
-.history-tooltip p {
-  margin: 0;
-  font-size: 0.82rem;
-}
-
-.history-tooltip p + p {
-  margin-top: 0.2rem;
 }
 
 .nav-active {

@@ -1,5 +1,25 @@
 import { Router } from 'express';
 
+function deriveWalletScanStatus({ scanRunStatus, scanSummary, scanError }) {
+  if (scanRunStatus) {
+    return scanRunStatus;
+  }
+
+  if (!scanSummary) {
+    return scanError ? 'failed' : null;
+  }
+
+  if (scanError && scanSummary.attemptedWalletCount === 0) {
+    return 'failed';
+  }
+
+  if (scanSummary.attemptedWalletCount === 0) {
+    return 'skipped';
+  }
+
+  return scanSummary.failedWalletCount > 0 ? 'partial' : 'success';
+}
+
 export function createAssetsRouter({
   chainsRepository,
   walletsRepository,
@@ -71,11 +91,67 @@ export function createAssetsRouter({
 
       let scan = null;
       let scanError = null;
+      let scanSummary = null;
       if (wallet) {
         try {
           scan = await walletScanService.rescanWallet({ walletId: wallet.id });
         } catch (error) {
           scanError = error instanceof Error ? error.message : String(error);
+        }
+      } else {
+        let chainWallets = [];
+        try {
+          const listedWallets = await walletsRepository.listWallets({ chainId, includeInactive: false });
+          chainWallets = Array.isArray(listedWallets) ? listedWallets : [];
+        } catch (error) {
+          scanError = error instanceof Error ? error.message : String(error);
+          scanSummary = {
+            mode: 'chain_wallets',
+            chainId,
+            attemptedWalletCount: 0,
+            successfulWalletCount: 0,
+            failedWalletCount: 0,
+            failures: [],
+            message: 'Token added, but failed to load active addresses for scan.'
+          };
+        }
+
+        if (!scanSummary) {
+          const failures = [];
+          let attemptedWalletCount = 0;
+
+          for (const chainWallet of chainWallets) {
+            attemptedWalletCount += 1;
+            try {
+              await walletScanService.rescanWallet({ walletId: chainWallet.id });
+            } catch (error) {
+              failures.push({
+                walletId: chainWallet.id,
+                error: error instanceof Error ? error.message : String(error)
+              });
+            }
+          }
+
+          const failedWalletCount = failures.length;
+          const successfulWalletCount = attemptedWalletCount - failedWalletCount;
+          const hasFailures = failedWalletCount > 0;
+          scanSummary = {
+            mode: 'chain_wallets',
+            chainId,
+            attemptedWalletCount,
+            successfulWalletCount,
+            failedWalletCount,
+            failures,
+            message:
+              attemptedWalletCount === 0
+                ? 'No active addresses on this chain to scan.'
+                : hasFailures
+                  ? `Rescanned ${successfulWalletCount}/${attemptedWalletCount} addresses.`
+                  : `Rescanned ${attemptedWalletCount} addresses.`
+          };
+          scanError = hasFailures
+            ? `Failed to rescan ${failedWalletCount} address${failedWalletCount === 1 ? '' : 'es'}.`
+            : null;
         }
       }
 
@@ -83,8 +159,13 @@ export function createAssetsRouter({
         data: {
           ...token,
           walletScanId: scan?.scanRun?.id ?? null,
-          walletScanStatus: scan?.scanRun?.status ?? null,
-          walletScanError: scanError
+          walletScanStatus: deriveWalletScanStatus({
+            scanRunStatus: scan?.scanRun?.status ?? null,
+            scanSummary,
+            scanError
+          }),
+          walletScanError: scanError,
+          scanSummary
         }
       });
     } catch (error) {

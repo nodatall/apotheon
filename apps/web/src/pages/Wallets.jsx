@@ -118,9 +118,9 @@ export default function Wallets() {
       const chainId = normalizeString(wallet?.chainId);
       const normalizedAddress = normalizeAddressGroupKey(address);
       const normalizedLabel = label.toLowerCase();
-      const groupKey = normalizedLabel
-        ? `label:${normalizedLabel}`
-        : (normalizedAddress ? `address:${normalizedAddress}` : `wallet:${walletId}`);
+      const groupKey = normalizedAddress
+        ? `address:${normalizedAddress}`
+        : (normalizedLabel ? `label:${normalizedLabel}` : `wallet:${walletId}`);
 
       if (!groups.has(groupKey)) {
         groups.set(groupKey, {
