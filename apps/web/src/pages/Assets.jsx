@@ -1,15 +1,28 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Card,
+  CardBody,
+  CardHeader,
+  Select,
+  SelectItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow
+} from '@heroui/react';
 import { api } from '../api/client.js';
 
 const ALL_WALLETS_FILTER = '__all__';
 
 const AVATAR_COLORS = [
-  ['#1d4ed8', '#3b82f6'],
-  ['#1e40af', '#60a5fa'],
-  ['#b45309', '#f59e0b'],
-  ['#7c3aed', '#a78bfa'],
-  ['#be123c', '#f43f5e'],
-  ['#155e75', '#38bdf8']
+  ['#3A2A5C', '#B089FF'],
+  ['#513042', '#E58DB2'],
+  ['#6D4B2D', '#E3AE76'],
+  ['#2E4337', '#81B096'],
+  ['#6A3D4B', '#D67B8F'],
+  ['#2B3750', '#A7A0C9']
 ];
 
 const CHAIN_BADGE_ICON_BY_SLUG = {
@@ -66,7 +79,6 @@ function normalizeAddressGroupKey(address) {
     return '';
   }
 
-  // Keep case-sensitive chains (like Solana) untouched; normalize EVM addresses only.
   if (/^0x[a-fA-F0-9]{40}$/.test(normalizedAddress)) {
     return normalizedAddress.toLowerCase();
   }
@@ -179,6 +191,23 @@ function buildWalletGroups(wallets) {
     .sort((left, right) => left.displayLabel.localeCompare(right.displayLabel));
 }
 
+function getFirstSelectionKey(selection, fallbackValue) {
+  if (selection === 'all') {
+    return fallbackValue;
+  }
+
+  const first = Array.from(selection)[0];
+  if (typeof first === 'string') {
+    return first;
+  }
+
+  if (first === null || first === undefined) {
+    return fallbackValue;
+  }
+
+  return String(first);
+}
+
 export default function Assets() {
   const [dashboard, setDashboard] = useState(null);
   const [chains, setChains] = useState([]);
@@ -279,10 +308,10 @@ export default function Assets() {
 
   return (
     <div className="page-grid">
-      <section className="card hero">
-        <div className="asset-toolbar">
+      <Card className="hero-card">
+        <CardHeader className="asset-toolbar">
           <div>
-            <h2>
+            <h2 className="text-2xl font-semibold tracking-tight">
               Total assets:{' '}
               {formatUsd(totalAssetsValue, {
                 minimumFractionDigits: 0,
@@ -291,44 +320,47 @@ export default function Assets() {
             </h2>
           </div>
           <div className="asset-toolbar-side">
-            <label className="asset-filter-control">
-              <span className="muted">Address filter</span>
-              <select
-                value={selectedWalletGroup}
-                onChange={(event) => setSelectedWalletGroup(event.target.value)}
-              >
-                <option value={ALL_WALLETS_FILTER}>All addresses</option>
-                {walletGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.displayLabel}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select
+              aria-label="Address filter"
+              selectedKeys={[selectedWalletGroup]}
+              onSelectionChange={(keys) =>
+                setSelectedWalletGroup(getFirstSelectionKey(keys, ALL_WALLETS_FILTER))
+              }
+              className="asset-filter"
+              disallowEmptySelection
+            >
+              <SelectItem key={ALL_WALLETS_FILTER}>All addresses</SelectItem>
+              {walletGroups.map((group) => (
+                <SelectItem key={group.id}>{group.displayLabel}</SelectItem>
+              ))}
+            </Select>
           </div>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-      </section>
+        </CardHeader>
+        {error ? (
+          <CardBody className="pt-0">
+            <p className="error">{error}</p>
+          </CardBody>
+        ) : null}
+      </Card>
 
-      <section className="card hero">
-        <table className="table assets-table">
-          <thead>
-            <tr>
-              <th>Token</th>
-              <th>Price</th>
-              <th>Amount</th>
-              <th className="table-right">USD Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tokenRows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="muted">
-                  No token balances yet.
-                </td>
-              </tr>
-            ) : (
-              tokenRows.map((row) => {
+      <Card className="hero-card">
+        <CardBody>
+          <Table
+            aria-label="Token balances table"
+            removeWrapper
+            classNames={{
+              th: 'px-4 py-3',
+              td: 'px-4 py-3'
+            }}
+          >
+            <TableHeader>
+              <TableColumn>Token</TableColumn>
+              <TableColumn>Price</TableColumn>
+              <TableColumn>Amount</TableColumn>
+              <TableColumn className="text-right">USD Value</TableColumn>
+            </TableHeader>
+            <TableBody emptyContent="No token balances yet.">
+              {tokenRows.map((row) => {
                 const label = getTokenLabel(row);
                 const rowKey =
                   row.snapshotItemId ||
@@ -339,8 +371,8 @@ export default function Assets() {
                 const iconFailed = brokenIcons[rowKey] === true;
                 const chainBadge = getChainBadge(chainById.get(row.chainId));
                 return (
-                  <tr key={rowKey}>
-                    <td>
+                  <TableRow key={rowKey}>
+                    <TableCell>
                       <div className="token-cell">
                         <span className="token-avatar-stack">
                           {hasIconUrl && !iconFailed ? (
@@ -383,17 +415,19 @@ export default function Assets() {
                         </span>
                         <span className="token-symbol">{label}</span>
                       </div>
-                    </td>
-                    <td>{formatUsd(row.usdPrice, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</td>
-                    <td>{formatAmount(row.quantity)}</td>
-                    <td className="table-right">{formatUsd(row.usdValue)}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>
+                      {formatUsd(row.usdPrice, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                    </TableCell>
+                    <TableCell>{formatAmount(row.quantity)}</TableCell>
+                    <TableCell className="text-right">{formatUsd(row.usdValue)}</TableCell>
+                  </TableRow>
                 );
-              })
-            )}
-          </tbody>
-        </table>
-      </section>
+              })}
+            </TableBody>
+          </Table>
+        </CardBody>
+      </Card>
     </div>
   );
 }

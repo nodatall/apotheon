@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { Button, Card, CardBody, Divider } from '@heroui/react';
 import Assets from './pages/Assets.jsx';
 import History from './pages/History.jsx';
 import Wallets from './pages/Wallets.jsx';
@@ -20,22 +21,33 @@ export default function App() {
   return (
     <main className="shell">
       <aside className="sidebar">
-        <h1>Apotheon</h1>
-        <nav>
-          {PAGES.map((page) => (
-            <button
-              key={page.key}
-              type="button"
-              className={page.key === pageKey ? 'nav-item active' : 'nav-item'}
-              onClick={() => setPageKey(page.key)}
-            >
-              {page.label}
-            </button>
-          ))}
-        </nav>
+        <Card className="sidebar-card" shadow="none">
+          <CardBody className="p-0">
+            <h1 className="sidebar-title">Apotheon</h1>
+            <Divider className="my-4" />
+            <nav className="nav-stack" aria-label="Primary">
+              {PAGES.map((page) => (
+                <Button
+                  key={page.key}
+                  type="button"
+                  fullWidth
+                  radius="sm"
+                  variant={page.key === pageKey ? 'solid' : 'flat'}
+                  color="default"
+                  className={page.key === pageKey ? 'justify-start nav-active' : 'justify-start'}
+                  onPress={() => setPageKey(page.key)}
+                >
+                  {page.label}
+                </Button>
+              ))}
+            </nav>
+          </CardBody>
+        </Card>
       </aside>
       <section className="content">
-        <ActivePage />
+        <div className="content-inner">
+          <ActivePage />
+        </div>
       </section>
     </main>
   );
