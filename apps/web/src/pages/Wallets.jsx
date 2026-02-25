@@ -1,4 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  Chip,
+  Input,
+  Select,
+  SelectItem,
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow
+} from '@heroui/react';
 import { api } from '../api/client.js';
 import Modal from '../components/Modal.jsx';
 
@@ -10,15 +26,53 @@ function shortAddress(address) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function normalizeString(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  return value.trim();
+}
+
+function normalizeAddressGroupKey(address) {
+  const normalizedAddress = normalizeString(address);
+  if (!normalizedAddress) {
+    return '';
+  }
+
+  if (/^0x[a-fA-F0-9]{40}$/.test(normalizedAddress)) {
+    return normalizedAddress.toLowerCase();
+  }
+
+  return normalizedAddress;
+}
+
+function getFirstSelectionKey(selection, fallbackValue = '') {
+  if (selection === 'all') {
+    return fallbackValue;
+  }
+
+  const first = Array.from(selection)[0];
+  if (typeof first === 'string') {
+    return first;
+  }
+
+  if (first === null || first === undefined) {
+    return fallbackValue;
+  }
+
+  return String(first);
+}
+
 export default function Wallets() {
   const [wallets, setWallets] = useState([]);
-  const [tokens, setTokens] = useState([]);
   const [chains, setChains] = useState([]);
   const [error, setError] = useState('');
   const [busyKey, setBusyKey] = useState('');
   const [scanResult, setScanResult] = useState(null);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
+  const [expandedWalletGroups, setExpandedWalletGroups] = useState(() => new Set());
   const [submittingWallet, setSubmittingWallet] = useState(false);
   const [submittingToken, setSubmittingToken] = useState(false);
   const [walletForm, setWalletForm] = useState({
@@ -28,19 +82,16 @@ export default function Wallets() {
   });
   const [tokenForm, setTokenForm] = useState({
     chainId: '',
-    walletId: '',
     contractOrMint: '',
     symbol: ''
   });
 
   async function refresh() {
-    const [walletRows, tokenRows, chainRows] = await Promise.all([
+    const [walletRows, chainRows] = await Promise.all([
       api.getWallets(),
-      api.getTokens(),
       api.getChains()
     ]);
     setWallets(walletRows || []);
-    setTokens(tokenRows || []);
     setChains(chainRows || []);
   }
 
@@ -53,10 +104,90 @@ export default function Wallets() {
     [chains]
   );
 
-  const filteredWallets = useMemo(
-    () => wallets.filter((wallet) => !tokenForm.chainId || wallet.chainId === tokenForm.chainId),
-    [wallets, tokenForm.chainId]
-  );
+  const walletGroups = useMemo(() => {
+    const groups = new Map();
+
+    for (const wallet of wallets) {
+      const walletId = normalizeString(wallet?.id);
+      if (!walletId) {
+        continue;
+      }
+
+      const address = normalizeString(wallet?.address);
+      const label = normalizeString(wallet?.label);
+      const chainId = normalizeString(wallet?.chainId);
+      const normalizedAddress = normalizeAddressGroupKey(address);
+      const normalizedLabel = label.toLowerCase();
+      const groupKey = normalizedLabel
+        ? `label:${normalizedLabel}`
+        : (normalizedAddress ? `address:${normalizedAddress}` : `wallet:${walletId}`);
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          id: groupKey,
+          address,
+          label,
+          wallets: []
+        });
+      }
+
+      const group = groups.get(groupKey);
+      if (!group.address && address) {
+        group.address = address;
+      }
+      if (!group.label && label) {
+        group.label = label;
+      }
+      group.wallets.push({
+        ...wallet,
+        id: walletId,
+        chainId,
+        address,
+        label
+      });
+    }
+
+    return Array.from(groups.values())
+      .map((group) => {
+        const sortedWallets = [...group.wallets].sort((left, right) => {
+          const leftChain = chainNameById.get(left.chainId) || left.chainId || '';
+          const rightChain = chainNameById.get(right.chainId) || right.chainId || '';
+          return leftChain.localeCompare(rightChain);
+        });
+        const uniqueAddresses = Array.from(
+          new Set(sortedWallets.map((wallet) => wallet.address).filter(Boolean))
+        );
+        const primaryAddress = uniqueAddresses[0] || group.address || '';
+        const addressDisplay = primaryAddress
+          ? shortAddress(primaryAddress)
+          : '-';
+        const addressSuffix = uniqueAddresses.length > 1
+          ? ` +${uniqueAddresses.length - 1}`
+          : '';
+
+        return {
+          ...group,
+          chainCount: sortedWallets.length,
+          displayLabel: group.label || shortAddress(primaryAddress) || '-',
+          wallets: sortedWallets,
+          primaryAddress,
+          addressDisplay: `${addressDisplay}${addressSuffix}`.trim(),
+          addressTitle: uniqueAddresses.length > 1 ? uniqueAddresses.join(', ') : primaryAddress
+        };
+      })
+      .sort((left, right) => left.displayLabel.localeCompare(right.displayLabel));
+  }, [wallets, chainNameById]);
+
+  useEffect(() => {
+    const groupIds = new Set(walletGroups.map((group) => group.id));
+    setExpandedWalletGroups((previous) => {
+      const next = new Set([...previous].filter((groupId) => groupIds.has(groupId)));
+      if (next.size === previous.size) {
+        return previous;
+      }
+      return next;
+    });
+  }, [walletGroups]);
 
   async function submitWallet(event) {
     event.preventDefault();
@@ -102,8 +233,7 @@ export default function Wallets() {
         if (addedRows.length === 1) {
           setTokenForm((previous) => ({
             ...previous,
-            chainId: addedRows[0].chainId,
-            walletId: addedRows[0].id
+            chainId: addedRows[0].chainId
           }));
         }
         setWalletForm((previous) => ({
@@ -124,8 +254,7 @@ export default function Wallets() {
       }));
       setTokenForm((previous) => ({
         ...previous,
-        chainId: previous.chainId || createdWallet.chainId,
-        walletId: createdWallet.id
+        chainId: previous.chainId || createdWallet.chainId
       }));
       setWalletModalOpen(false);
       await refresh();
@@ -145,7 +274,6 @@ export default function Wallets() {
     try {
       const token = await api.addToken({
         chainId: tokenForm.chainId,
-        walletId: tokenForm.walletId || undefined,
         contractOrMint: tokenForm.contractOrMint,
         symbol: tokenForm.symbol || undefined
       });
@@ -155,7 +283,7 @@ export default function Wallets() {
         symbol: ''
       }));
       setScanResult({
-        status: token.walletScanStatus,
+        status: token.scanSummary?.message || token.walletScanStatus,
         error: token.walletScanError
       });
       setTokenModalOpen(false);
@@ -181,191 +309,202 @@ export default function Wallets() {
     }
   }
 
-  async function removeToken(tokenId) {
-    setError('');
-    setBusyKey(`token-${tokenId}`);
-
-    try {
-      await api.setTokenActivation(tokenId, false);
-      await refresh();
-    } catch (removeError) {
-      setError(removeError.message);
-    } finally {
-      setBusyKey('');
-    }
+  function toggleWalletGroup(groupId) {
+    setExpandedWalletGroups((previous) => {
+      const next = new Set(previous);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
   }
 
   return (
     <div className="page-grid">
-      <section className="card hero">
-        <div className="asset-toolbar">
+      <Card className="hero-card">
+        <CardHeader className="asset-toolbar">
           <div>
-            <h2>Addresses</h2>
+            <h2 className="text-2xl font-semibold tracking-tight">Addresses</h2>
             <p className="muted">Manage tracked addresses and tracked tokens.</p>
           </div>
           <div className="asset-toolbar-side">
             <div className="button-row">
-              <button type="button" className="primary-button" onClick={() => setWalletModalOpen(true)}>
+              <Button className="ap-pill-button" onPress={() => setWalletModalOpen(true)}>
                 Add Address
-              </button>
-              <button type="button" className="primary-button" onClick={() => setTokenModalOpen(true)}>
+              </Button>
+              <Button className="ap-pill-button" onPress={() => setTokenModalOpen(true)}>
                 Add Token
-              </button>
+              </Button>
             </div>
           </div>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        {scanResult?.status ? <p className="muted">Address scan status: {scanResult.status}</p> : null}
-        {scanResult?.error ? <p className="error">Address scan error: {scanResult.error}</p> : null}
-      </section>
+        </CardHeader>
+        <CardBody className="pt-0 gap-2">
+          {error ? <p className="error">{error}</p> : null}
+          {scanResult?.status ? (
+            <Chip color="primary" variant="flat" className="w-fit">
+              Status: {scanResult.status}
+            </Chip>
+          ) : null}
+          {scanResult?.error ? <p className="error">Scan error: {scanResult.error}</p> : null}
+        </CardBody>
+      </Card>
 
-      <section className="card">
-        <h3>Tracked Addresses</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Address</th>
-              <th>Chain</th>
-              <th className="table-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {wallets.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="muted">
-                  No addresses added yet.
-                </td>
-              </tr>
-            ) : (
-              wallets.map((wallet) => (
-                <tr key={wallet.id}>
-                  <td>{wallet.label || '-'}</td>
-                  <td title={wallet.address}>{shortAddress(wallet.address)}</td>
-                  <td>{chainNameById.get(wallet.chainId) || wallet.chainId}</td>
-                  <td className="table-right">
-                    <button
-                      type="button"
-                      className="table-x-button"
-                      title="Remove address"
-                      aria-label="Remove address"
-                      onClick={() => removeWallet(wallet.id)}
-                      disabled={busyKey === `wallet-${wallet.id}`}
-                    >
-                      {busyKey === `wallet-${wallet.id}` ? '…' : 'X'}
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
+      <Card className="panel-card wallets-tracked-addresses-card">
+        <CardHeader>
+          <h3 className="text-base font-semibold">Tracked Addresses</h3>
+        </CardHeader>
+        <CardBody className="pt-0">
+          <Table
+            aria-label="Tracked addresses"
+            removeWrapper
+          >
+            <TableHeader>
+              <TableColumn>Label</TableColumn>
+              <TableColumn>Address</TableColumn>
+              <TableColumn>Chain</TableColumn>
+              <TableColumn className="text-right">Action</TableColumn>
+            </TableHeader>
+            <TableBody emptyContent="No addresses added yet.">
+              {walletGroups.flatMap((group) => {
+                const isExpanded = expandedWalletGroups.has(group.id);
+                const hasChildren = group.chainCount > 1;
+                const primaryWallet = group.wallets[0] || null;
+                const parentChainLabel = hasChildren
+                  ? `${group.chainCount} chains`
+                  : (primaryWallet
+                    ? (chainNameById.get(primaryWallet.chainId) || primaryWallet.chainId || '-')
+                    : '-');
+                const rows = [
+                  <TableRow key={`group-${group.id}`}>
+                    <TableCell>
+                      <span>{group.displayLabel}</span>
+                    </TableCell>
+                    <TableCell title={group.addressTitle || '-'}>
+                      {group.addressDisplay || '-'}
+                    </TableCell>
+                    <TableCell>{parentChainLabel}</TableCell>
+                    <TableCell className="text-right">
+                      {hasChildren ? (
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          onPress={() => toggleWalletGroup(group.id)}
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${group.displayLabel}`}
+                          title={isExpanded ? 'Collapse' : 'Expand'}
+                        >
+                          <span className="wallet-group-expand-icon" aria-hidden="true">
+                            {isExpanded ? '▾' : '▸'}
+                          </span>
+                        </Button>
+                      ) : (primaryWallet ? (
+                        <Button
+                          isIconOnly
+                          size="sm"
+                          variant="light"
+                          color="danger"
+                          title="Remove address"
+                          aria-label="Remove address"
+                          onPress={() => removeWallet(primaryWallet.id)}
+                          isLoading={busyKey === `wallet-${primaryWallet.id}`}
+                        >
+                          ×
+                        </Button>
+                      ) : null)}
+                    </TableCell>
+                  </TableRow>
+                ];
 
-      <section className="card">
-        <h3>Tracked Tokens</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Symbol</th>
-              <th>Name</th>
-              <th>Chain</th>
-              <th>Contract/Mint</th>
-              <th className="table-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tokens.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="muted">
-                  No tokens tracked yet.
-                </td>
-              </tr>
-            ) : (
-              tokens.map((token) => (
-                <tr key={token.id || `${token.chainId}-${token.contractOrMint}`}>
-                  <td>{token.symbol || '-'}</td>
-                  <td>{token.name || '-'}</td>
-                  <td>{chainNameById.get(token.chainId) || token.chainId}</td>
-                  <td title={token.contractOrMint}>{shortAddress(token.contractOrMint)}</td>
-                  <td className="table-right">
-                    <button
-                      type="button"
-                      className="table-x-button"
-                      title="Remove token"
-                      aria-label="Remove token"
-                      onClick={() => removeToken(token.id)}
-                      disabled={!token.id || busyKey === `token-${token.id}`}
-                    >
-                      {busyKey === `token-${token.id}` ? '…' : 'X'}
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
+                if (hasChildren && isExpanded) {
+                  for (const wallet of group.wallets) {
+                    rows.push(
+                      <TableRow key={`group-${group.id}-wallet-${wallet.id}`}>
+                        <TableCell>
+                          <span className="wallet-group-child-label">
+                            {wallet.label || '-'}
+                          </span>
+                        </TableCell>
+                        <TableCell title={wallet.address || '-'}>{shortAddress(wallet.address || '-')}</TableCell>
+                        <TableCell>{chainNameById.get(wallet.chainId) || wallet.chainId || '-'}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            isIconOnly
+                            size="sm"
+                            variant="light"
+                            color="danger"
+                            title="Remove address"
+                            aria-label="Remove address"
+                            onPress={() => removeWallet(wallet.id)}
+                            isLoading={busyKey === `wallet-${wallet.id}`}
+                          >
+                            ×
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }
+                }
+
+                return rows;
+              })}
+            </TableBody>
+          </Table>
+        </CardBody>
+      </Card>
 
       {walletModalOpen ? (
         <Modal title="Add Address" onClose={() => setWalletModalOpen(false)}>
-          <form className="form" onSubmit={submitWallet}>
-            <label>
-              Chain
-              <select
-                value={walletForm.chainId}
-                onChange={(event) =>
-                  setWalletForm((previous) => ({ ...previous, chainId: event.target.value }))
-                }
-                required
-              >
-                <option value="">Select chain</option>
-                <option value="__all__">All active chains (auto-detect balances)</option>
-                {chains.map((chain) => (
-                  <option key={chain.id} value={chain.id}>
-                    {chain.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Address
-              <input
-                value={walletForm.address}
-                onChange={(event) =>
-                  setWalletForm((previous) => ({ ...previous, address: event.target.value }))
-                }
-                required
-              />
-            </label>
-            <label>
-              Label (optional)
-              <input
-                value={walletForm.label}
-                onChange={(event) =>
-                  setWalletForm((previous) => ({ ...previous, label: event.target.value }))
-                }
-              />
-            </label>
+          <form className="form-grid" onSubmit={submitWallet}>
+            <Select
+              label="Chain"
+              selectedKeys={walletForm.chainId ? [walletForm.chainId] : []}
+              onSelectionChange={(keys) =>
+                setWalletForm((previous) => ({
+                  ...previous,
+                  chainId: getFirstSelectionKey(keys)
+                }))
+              }
+              isRequired
+            >
+              <SelectItem key="__all__">All active chains (auto-detect balances)</SelectItem>
+              {chains.map((chain) => (
+                <SelectItem key={chain.id}>{chain.name}</SelectItem>
+              ))}
+            </Select>
+
+            <Input
+              label="Address"
+              value={walletForm.address}
+              onValueChange={(value) =>
+                setWalletForm((previous) => ({
+                  ...previous,
+                  address: value
+                }))
+              }
+              isRequired
+            />
+
+            <Input
+              label="Label (optional)"
+              value={walletForm.label}
+              onValueChange={(value) =>
+                setWalletForm((previous) => ({
+                  ...previous,
+                  label: value
+                }))
+              }
+            />
+
             <div className="button-row">
-              <button type="button" className="ghost-button" onClick={() => setWalletModalOpen(false)}>
+              <Button variant="flat" onPress={() => setWalletModalOpen(false)}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                className={`primary-button${submittingWallet ? ' is-loading' : ''}`}
-                disabled={submittingWallet}
-                aria-busy={submittingWallet}
-              >
-                {submittingWallet ? (
-                  <>
-                    <span className="button-spinner" aria-hidden />
-                    <span className="button-loading-text">Scanning chains</span>
-                  </>
-                ) : (
-                  'Add Address'
-                )}
-              </button>
+              </Button>
+              <Button type="submit" className="ap-pill-button" isLoading={submittingWallet}>
+                {submittingWallet ? 'Scanning chains' : 'Add Address'}
+              </Button>
             </div>
           </form>
         </Modal>
@@ -373,70 +512,53 @@ export default function Wallets() {
 
       {tokenModalOpen ? (
         <Modal title="Add Token" onClose={() => setTokenModalOpen(false)}>
-          <form className="form" onSubmit={submitToken}>
-            <label>
-              Chain
-              <select
-                value={tokenForm.chainId}
-                onChange={(event) =>
-                  setTokenForm((previous) => ({
-                    ...previous,
-                    chainId: event.target.value,
-                    walletId: ''
-                  }))
-                }
-                required
-              >
-                <option value="">Select chain</option>
-                {chains.map((chain) => (
-                  <option key={chain.id} value={chain.id}>
-                    {chain.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Address to update (optional)
-              <select
-                value={tokenForm.walletId}
-                onChange={(event) =>
-                  setTokenForm((previous) => ({ ...previous, walletId: event.target.value }))
-                }
-              >
-                <option value="">None</option>
-                {filteredWallets.map((wallet) => (
-                  <option key={wallet.id} value={wallet.id}>
-                    {wallet.label || wallet.address}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Contract or mint
-              <input
-                value={tokenForm.contractOrMint}
-                onChange={(event) =>
-                  setTokenForm((previous) => ({ ...previous, contractOrMint: event.target.value }))
-                }
-                required
-              />
-            </label>
-            <label>
-              Symbol override (optional)
-              <input
-                value={tokenForm.symbol}
-                onChange={(event) =>
-                  setTokenForm((previous) => ({ ...previous, symbol: event.target.value }))
-                }
-              />
-            </label>
+          <form className="form-grid" onSubmit={submitToken}>
+            <Select
+              label="Chain"
+              selectedKeys={tokenForm.chainId ? [tokenForm.chainId] : []}
+              onSelectionChange={(keys) =>
+                setTokenForm((previous) => ({
+                  ...previous,
+                  chainId: getFirstSelectionKey(keys)
+                }))
+              }
+              isRequired
+            >
+              {chains.map((chain) => (
+                <SelectItem key={chain.id}>{chain.name}</SelectItem>
+              ))}
+            </Select>
+
+            <Input
+              label="Contract or mint"
+              value={tokenForm.contractOrMint}
+              onValueChange={(value) =>
+                setTokenForm((previous) => ({
+                  ...previous,
+                  contractOrMint: value
+                }))
+              }
+              isRequired
+            />
+
+            <Input
+              label="Symbol override (optional)"
+              value={tokenForm.symbol}
+              onValueChange={(value) =>
+                setTokenForm((previous) => ({
+                  ...previous,
+                  symbol: value
+                }))
+              }
+            />
+
             <div className="button-row">
-              <button type="button" className="ghost-button" onClick={() => setTokenModalOpen(false)}>
+              <Button variant="flat" onPress={() => setTokenModalOpen(false)}>
                 Cancel
-              </button>
-              <button type="submit" className="primary-button" disabled={submittingToken}>
-                {submittingToken ? 'Adding...' : 'Add Token'}
-              </button>
+              </Button>
+              <Button type="submit" className="ap-pill-button" isLoading={submittingToken}>
+                {submittingToken ? 'Adding token' : 'Add Token'}
+              </Button>
             </div>
           </form>
         </Modal>

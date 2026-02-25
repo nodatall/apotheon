@@ -12,7 +12,7 @@
   --ap-surface-accent: #1e2635;
   --ap-border: #2f384b;
   --ap-border-strong: #404c64;
-  --ap-text: #dce0ea;
+  --ap-text: #c8c8c8;
   --ap-text-muted: #99a3bb;
   --ap-error: #d67b8f;
   --ap-accent-primary: #b089ff;
@@ -56,11 +56,17 @@ p {
   background: transparent !important;
 }
 
-.sidebar-title {
-  margin: 0;
-  font-family: 'Sora', 'Manrope', sans-serif;
-  font-size: 1.8rem;
-  letter-spacing: 0.02em;
+.sidebar-brand {
+  min-height: 2.8rem;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-logo {
+  width: 2.7rem;
+  height: 2.7rem;
+  display: block;
+  object-fit: contain;
 }
 
 .nav-stack {
@@ -76,6 +82,10 @@ p {
   width: 100%;
   max-width: 1040px;
   margin: 0 auto;
+}
+
+.content-inner-wide {
+  max-width: 1480px;
 }
 
 .page-grid {
@@ -96,6 +106,10 @@ p {
   grid-column: span 6;
   box-shadow: none;
   background: linear-gradient(162deg, var(--ap-surface) 0%, var(--ap-surface-elevated) 100%);
+}
+
+.wallets-tracked-addresses-card {
+  grid-column: span 12;
 }
 
 .muted {
@@ -124,6 +138,37 @@ p {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+}
+
+.ap-pill-button {
+  min-height: 2.5rem !important;
+  padding-inline: 1.05rem !important;
+  border-radius: .5rem !important;
+  border: 1px solid #2b3550 !important;
+  background: linear-gradient(180deg, #1c2538 0%, #151d2d 100%) !important;
+  color: #bf9cff !important;
+  letter-spacing: 0.01em;
+}
+
+.ap-pill-button:hover,
+.ap-pill-button[data-hover='true'] {
+  background: linear-gradient(180deg, #222d44 0%, #1a2336 100%) !important;
+  border-color: #374668 !important;
+  color: #cab0ff !important;
+}
+
+.ap-pill-button:active,
+.ap-pill-button[data-pressed='true'] {
+  background: linear-gradient(180deg, #161f30 0%, #131a28 100%) !important;
+}
+
+.ap-pill-button[data-focus-visible='true'] {
+  outline: 2px solid color-mix(in srgb, #bf9cff 70%, transparent) !important;
+  outline-offset: 1px;
+}
+
+.ap-pill-button[data-disabled='true'] {
+  opacity: 0.6 !important;
 }
 
 .form-grid {
@@ -219,12 +264,24 @@ p {
   letter-spacing: 0.02em;
 }
 
+.wallet-group-expand-icon {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.wallet-group-child-label {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 1.22rem;
+  color: var(--ap-text-muted);
+}
+
 .history-chart {
   position: relative;
   border: 1px solid var(--ap-border);
   border-radius: 0.65rem;
   background: var(--ap-surface);
-  padding: 0.35rem;
+  padding: 0;
   overflow: hidden;
 }
 
@@ -256,13 +313,15 @@ p {
 }
 
 .nav-active {
-  background: hsl(var(--heroui-primary-200)) !important;
-  color: hsl(var(--heroui-foreground)) !important;
-  border: 1px solid hsl(var(--heroui-primary-400)) !important;
+  background: linear-gradient(180deg, #1c2538 0%, #151d2d 100%) !important;
+  color: #bf9cff !important;
+  border: 1px solid #2b3550 !important;
 }
 
 .nav-active:hover {
-  background: hsl(var(--heroui-primary-300)) !important;
+  background: linear-gradient(180deg, #222d44 0%, #1a2336 100%) !important;
+  color: #cab0ff !important;
+  border-color: #374668 !important;
 }
 
 [data-theme='dark'] [data-slot='trigger'],
@@ -284,8 +343,10 @@ p {
 
 [data-theme='dark'] [data-slot='listbox'] [data-selected='true'],
 [data-theme='dark'] [role='option'][data-selected='true'] {
-  background: hsl(var(--heroui-primary-300)) !important;
-  color: hsl(var(--heroui-foreground)) !important;
+  background: linear-gradient(180deg, #1c2538 0%, #151d2d 100%) !important;
+  color: #bf9cff !important;
+  border: 1px solid #2b3550 !important;
+  box-shadow: inset 0 0 0 1px rgb(191 156 255 / 10%);
 }
 
 [data-theme='dark'] [data-slot='listbox'] [data-hover='true']:not([data-selected='true']),
