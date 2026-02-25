@@ -1,34 +1,38 @@
-import React, { useEffect } from 'react';
+import React from 'react';
+import {
+  Button,
+  Modal as HeroModal,
+  ModalBody,
+  ModalContent,
+  ModalHeader
+} from '@heroui/react';
 
 export default function Modal({ title, onClose, children }) {
-  useEffect(() => {
-    function handleEscape(event) {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    }
-
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
-
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <div
-        className="modal-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-header">
-          <h3>{title}</h3>
-          <button type="button" className="icon-button" onClick={onClose} aria-label="Close modal">
-            ×
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <HeroModal
+      isOpen
+      size="2xl"
+      backdrop="blur"
+      scrollBehavior="inside"
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          onClose();
+        }
+      }}
+    >
+      <ModalContent>
+        {() => (
+          <>
+            <ModalHeader className="flex items-center justify-between gap-3">
+              <span>{title}</span>
+              <Button isIconOnly size="sm" variant="light" onPress={onClose} aria-label="Close modal">
+                ×
+              </Button>
+            </ModalHeader>
+            <ModalBody className="pb-6">{children}</ModalBody>
+          </>
+        )}
+      </ModalContent>
+    </HeroModal>
   );
 }
