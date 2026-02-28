@@ -57,21 +57,32 @@ p {
 }
 
 .sidebar-brand {
-  min-height: 2.8rem;
+  width: 100%;
+  height: 108px;
+  overflow: hidden;
+  position: relative;
   display: flex;
-  align-items: center;
+  justify-content: center;
+  align-items: flex-start;
+  margin-top: -14px;
 }
 
 .sidebar-logo {
-  width: 2.7rem;
-  height: 2.7rem;
+  width: 206px;
+  height: 206px;
   display: block;
   object-fit: contain;
+  position: absolute;
+  top: 0px;
+  opacity: .6;
+  left: 50%;
+  transform: translateX(-50%) scale(1.1);
 }
 
 .nav-stack {
   display: grid;
   gap: 0.5rem;
+  padding-bottom: 5px;
 }
 
 .content {
@@ -227,6 +238,37 @@ p {
   min-width: 300px;
 }
 
+.token-header-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+}
+
+.token-header-toggle-icon {
+  color: #bf9cff;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.token-header-toggle-icon svg {
+  width: 0.86rem;
+  height: 0.86rem;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .token-cell {
   display: flex;
   align-items: center;
@@ -291,6 +333,11 @@ p {
   border-radius: 999px;
 }
 
+.token-chain-count-badge {
+  font-size: 0.56rem;
+  letter-spacing: -0.01em;
+}
+
 .token-symbol {
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -321,6 +368,10 @@ p {
   width: 100%;
   height: auto;
   display: block;
+}
+
+.sidebar .bg-divider {
+  margin-top: 0;
 }
 
 .nav-active {

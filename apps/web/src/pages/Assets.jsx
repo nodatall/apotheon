@@ -38,7 +38,8 @@ const CHAIN_BADGE_ICON_BY_SLUG = {
   'binance-smart-chain': '/chains/bsc.png',
   avalanche: '/chains/avalanche.png',
   'avalanche-c-chain': '/chains/avalanche.png',
-  solana: '/chains/solana.png'
+  solana: '/chains/solana.png',
+  ronin: '/chains/ronin.png'
 };
 
 function formatUsd(value, { minimumFractionDigits = 2, maximumFractionDigits = 2 } = {}) {
@@ -71,6 +72,23 @@ function normalizeString(value) {
   }
 
   return value.trim();
+}
+
+function toFiniteNumber(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
 }
 
 function normalizeAddressGroupKey(address) {
@@ -208,11 +226,107 @@ function getFirstSelectionKey(selection, fallbackValue) {
   return String(first);
 }
 
+function buildSymbolCollapseKey(row, index) {
+  const symbol = normalizeString(row?.symbol).toUpperCase();
+  if (symbol) {
+    return `symbol:${symbol}`;
+  }
+
+  const contractOrMint = normalizeString(row?.contractOrMint).toLowerCase();
+  if (contractOrMint) {
+    return `contract:${contractOrMint}`;
+  }
+
+  return `row:${index}`;
+}
+
+function collapseRowsBySymbol(rows) {
+  const grouped = new Map();
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const key = buildSymbolCollapseKey(row, index);
+    const quantity = toFiniteNumber(row?.quantity) ?? 0;
+    const usdValue = toFiniteNumber(row?.usdValue);
+    const usdPrice = toFiniteNumber(row?.usdPrice);
+    const chainId = normalizeString(row?.chainId);
+
+    if (!grouped.has(key)) {
+      const chainIds = new Set();
+      if (chainId) {
+        chainIds.add(chainId);
+      }
+      grouped.set(key, {
+        key,
+        row: {
+          ...row,
+          walletId: null
+        },
+        quantityTotal: quantity,
+        usdValueTotal: usdValue ?? 0,
+        hasUsdValue: usdValue !== null,
+        fallbackUsdPrice: usdPrice,
+        chainIds
+      });
+      continue;
+    }
+
+    const current = grouped.get(key);
+    current.quantityTotal += quantity;
+    if (usdValue !== null) {
+      current.usdValueTotal += usdValue;
+      current.hasUsdValue = true;
+    }
+    if (current.fallbackUsdPrice === null && usdPrice !== null) {
+      current.fallbackUsdPrice = usdPrice;
+    }
+    if (chainId) {
+      current.chainIds.add(chainId);
+    }
+
+    if (!normalizeString(current.row.iconUrl) && normalizeString(row?.iconUrl)) {
+      current.row.iconUrl = row.iconUrl;
+    }
+    if (!normalizeString(current.row.symbol) && normalizeString(row?.symbol)) {
+      current.row.symbol = row.symbol;
+    }
+  }
+
+  return Array.from(grouped.values())
+    .map((group) => {
+      const chainIds = Array.from(group.chainIds);
+      const chainCount = chainIds.length;
+      const usdValue = group.hasUsdValue ? group.usdValueTotal : null;
+      const usdPrice =
+        usdValue !== null && group.quantityTotal > 0
+          ? usdValue / group.quantityTotal
+          : group.fallbackUsdPrice;
+
+      return {
+        ...group.row,
+        snapshotItemId: group.row.snapshotItemId || `collapsed-${group.key}`,
+        walletId: null,
+        chainId: chainCount === 1 ? chainIds[0] : null,
+        chainIds,
+        chainCount,
+        quantity: group.quantityTotal,
+        usdValue,
+        usdPrice
+      };
+    })
+    .sort((left, right) => {
+      const leftValue = typeof left.usdValue === 'number' ? left.usdValue : -1;
+      const rightValue = typeof right.usdValue === 'number' ? right.usdValue : -1;
+      return rightValue - leftValue;
+    });
+}
+
 export default function Assets() {
   const [dashboard, setDashboard] = useState(null);
   const [chains, setChains] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [selectedWalletGroup, setSelectedWalletGroup] = useState(ALL_WALLETS_FILTER);
+  const [collapseDuplicateSymbols, setCollapseDuplicateSymbols] = useState(false);
   const [error, setError] = useState('');
   const [brokenIcons, setBrokenIcons] = useState({});
 
@@ -281,7 +395,7 @@ export default function Assets() {
 
   const chainById = useMemo(() => new Map(chains.map((chain) => [chain.id, chain])), [chains]);
 
-  const tokenRows = useMemo(
+  const rawTokenRows = useMemo(
     () =>
       [...(dashboard?.rows?.tokens || [])].sort((left, right) => {
         const leftValue = typeof left.usdValue === 'number' ? left.usdValue : -1;
@@ -290,6 +404,13 @@ export default function Assets() {
       }),
     [dashboard?.rows?.tokens]
   );
+
+  const tokenRows = useMemo(() => {
+    if (!collapseDuplicateSymbols) {
+      return rawTokenRows;
+    }
+    return collapseRowsBySymbol(rawTokenRows);
+  }, [collapseDuplicateSymbols, rawTokenRows]);
 
   const selectedWalletUsdValue = useMemo(
     () =>
@@ -354,7 +475,30 @@ export default function Assets() {
             }}
           >
             <TableHeader>
-              <TableColumn>Token</TableColumn>
+              <TableColumn>
+                <button
+                  type="button"
+                  className="token-header-toggle"
+                  aria-pressed={collapseDuplicateSymbols}
+                  title={
+                    collapseDuplicateSymbols
+                      ? 'Show rows by chain'
+                      : 'Collapse duplicate symbols across chains'
+                  }
+                  onClick={() => setCollapseDuplicateSymbols((previous) => !previous)}
+                >
+                  <span>Token</span>
+                  {collapseDuplicateSymbols ? (
+                    <span className="token-header-toggle-icon" aria-hidden>
+                      <svg viewBox="0 0 16 16" role="img" focusable="false" aria-hidden="true">
+                        <ellipse cx="8" cy="3.5" rx="5.5" ry="2.2" />
+                        <path d="M2.5 3.5v3.2c0 1.2 2.4 2.2 5.5 2.2s5.5-1 5.5-2.2V3.5" />
+                        <path d="M2.5 6.7v3.2c0 1.2 2.4 2.2 5.5 2.2s5.5-1 5.5-2.2V6.7" />
+                      </svg>
+                    </span>
+                  ) : null}
+                </button>
+              </TableColumn>
               <TableColumn>Price</TableColumn>
               <TableColumn>Amount</TableColumn>
               <TableColumn className="text-right">USD Value</TableColumn>
@@ -370,6 +514,8 @@ export default function Assets() {
                 const hasIconUrl = typeof row.iconUrl === 'string' && row.iconUrl.trim().length > 0;
                 const iconFailed = brokenIcons[rowKey] === true;
                 const chainBadge = getChainBadge(chainById.get(row.chainId));
+                const collapsedChainCount =
+                  collapseDuplicateSymbols && Number.isInteger(row.chainCount) ? row.chainCount : 0;
                 return (
                   <TableRow key={rowKey}>
                     <TableCell>
@@ -393,7 +539,15 @@ export default function Assets() {
                               {label.slice(0, 1)}
                             </span>
                           )}
-                          {chainBadge ? (
+                          {collapsedChainCount > 1 ? (
+                            <span
+                              className="token-chain-badge token-chain-count-badge"
+                              title={`${collapsedChainCount} chains`}
+                              aria-label={`${collapsedChainCount} chains`}
+                            >
+                              {collapsedChainCount}
+                            </span>
+                          ) : chainBadge ? (
                             <span
                               className="token-chain-badge"
                               title={chainBadge.title}

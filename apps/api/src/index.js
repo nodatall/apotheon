@@ -182,6 +182,10 @@ export function createApp({
   return {
     app,
     chainsRepository: resolvedChainsRepository,
+    walletsRepository: resolvedWalletsRepository,
+    trackedTokensRepository: resolvedTrackedTokensRepository,
+    tokenUniverseRepository: resolvedTokenUniverseRepository,
+    walletScanService: resolvedWalletScanService,
     universeRefreshService: resolvedUniverseRefreshService,
     dailySnapshotService
   };
@@ -197,7 +201,16 @@ async function seedBuiltInChains(chainsRepository) {
 
 async function start() {
   const runtimeEnv = loadRuntimeEnv();
-  const { app, chainsRepository, universeRefreshService, dailySnapshotService } = createApp({
+  const {
+    app,
+    chainsRepository,
+    walletsRepository,
+    trackedTokensRepository,
+    tokenUniverseRepository,
+    walletScanService,
+    universeRefreshService,
+    dailySnapshotService
+  } = createApp({
     runtimeEnv
   });
   await seedBuiltInChains(chainsRepository);
@@ -207,20 +220,25 @@ async function start() {
   });
 
   const scheduler = createScheduler({
+    chainsRepository,
+    walletsRepository,
+    trackedTokensRepository,
+    tokenUniverseRepository,
+    walletScanService,
     universeRefreshService,
     dailySnapshotService
   });
 
-  scheduler.runDailyJobs().catch((error) => {
+  scheduler.runAutoScanCycle().catch((error) => {
     console.error('Initial scheduler run failed:', error);
   });
 
-  const intervalMs = Number(process.env.SCHEDULER_INTERVAL_MS || 60_000);
+  const intervalMs = Number(process.env.AUTO_SCAN_INTERVAL_MS || process.env.SCHEDULER_INTERVAL_MS || 300_000);
   const timer = setInterval(() => {
-    scheduler.runDailyJobs().catch((error) => {
+    scheduler.runAutoScanCycle().catch((error) => {
       console.error('Scheduled job run failed:', error);
     });
-  }, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 60_000);
+  }, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 300_000);
   timer.unref?.();
 
   return server;

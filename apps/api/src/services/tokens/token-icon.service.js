@@ -5,7 +5,8 @@ const EVM_NATIVE_SYMBOL_BY_SLUG = {
   optimism: 'ETH',
   polygon: 'MATIC',
   bsc: 'BNB',
-  avalanche: 'AVAX'
+  avalanche: 'AVAX',
+  ronin: 'RON'
 };
 
 function resolveNativeSymbol(chain) {

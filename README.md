@@ -19,6 +19,9 @@ Bare-bones monorepo scaffold for an on-chain crypto portfolio app.
    ```bash
    cp .env.example .env
    ```
+   Key runtime variables:
+   - `COINGECKO_API_KEY` (required)
+   - `AUTO_SCAN_INTERVAL_MS` (optional, defaults to `300000`)
 3. Ensure PostgreSQL is running locally and `DATABASE_URL` in `.env` points to it.
 4. Start API + web:
    ```bash

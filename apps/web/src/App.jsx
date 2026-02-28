@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button, Card, CardBody, Divider } from '@heroui/react';
-import logoMark from './brand/favicon-source.svg';
+import sidebarSunMark from './brand/apoth3.png';
 import Assets from './pages/Assets.jsx';
 import History from './pages/History.jsx';
 import Wallets from './pages/Wallets.jsx';
@@ -78,7 +78,7 @@ export default function App() {
         <Card className="sidebar-card" shadow="none">
           <CardBody className="p-0">
             <div className="sidebar-brand">
-              <img className="sidebar-logo" src={logoMark} alt="Apotheon" />
+              <img className="sidebar-logo" src={sidebarSunMark} alt="Apotheon emblem" />
             </div>
             <Divider className="my-4" />
             <nav className="nav-stack" aria-label="Primary">

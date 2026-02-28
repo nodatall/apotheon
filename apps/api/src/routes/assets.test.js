@@ -39,14 +39,16 @@ afterEach(async () => {
   );
 });
 
-test('assets: adding manual token with walletId triggers immediate wallet rescan', async () => {
+test('assets: adding manual token with walletId rescans active wallets on the chain', async () => {
+  const rescannedWalletIds = [];
   const baseUrl = await startServer(
     createAssetsRouter({
       chainsRepository: {
         getChainById: async (chainId) => ({ id: chainId, family: 'evm' })
       },
       walletsRepository: {
-        getWalletById: async (walletId) => ({ id: walletId, chainId: 'chain-1' })
+        getWalletById: async (walletId) => ({ id: walletId, chainId: 'chain-1' }),
+        listWallets: async ({ chainId }) => [{ id: `${chainId}-wallet-1` }]
       },
       manualTokenService: {
         registerManualToken: async () => ({
@@ -56,12 +58,15 @@ test('assets: adding manual token with walletId triggers immediate wallet rescan
         })
       },
       walletScanService: {
-        rescanWallet: async () => ({
-          scanRun: {
-            id: 'scan-1',
-            status: 'success'
-          }
-        })
+        rescanWallet: async ({ walletId }) => {
+          rescannedWalletIds.push(walletId);
+          return {
+            scanRun: {
+              id: 'scan-1',
+              status: 'success'
+            }
+          };
+        }
       },
       trackedTokensRepository: {
         listTrackedTokens: async () => []
@@ -83,9 +88,11 @@ test('assets: adding manual token with walletId triggers immediate wallet rescan
 
   assert.equal(response.status, 201);
   const body = await response.json();
-  assert.equal(body.data.walletScanId, 'scan-1');
+  assert.deepEqual(rescannedWalletIds, ['chain-1-wallet-1']);
+  assert.equal(body.data.walletScanId, null);
   assert.equal(body.data.walletScanStatus, 'success');
   assert.equal(body.data.walletScanError, null);
+  assert.equal(body.data.scanSummary.attemptedWalletCount, 1);
 });
 
 test('assets: adding manual token with walletId returns failed scan status when rescan fails', async () => {
@@ -95,7 +102,8 @@ test('assets: adding manual token with walletId returns failed scan status when 
         getChainById: async (chainId) => ({ id: chainId, family: 'evm' })
       },
       walletsRepository: {
-        getWalletById: async (walletId) => ({ id: walletId, chainId: 'chain-1' })
+        getWalletById: async (walletId) => ({ id: walletId, chainId: 'chain-1' }),
+        listWallets: async ({ chainId }) => [{ id: `${chainId}-wallet-1` }]
       },
       manualTokenService: {
         registerManualToken: async () => ({
@@ -130,9 +138,10 @@ test('assets: adding manual token with walletId returns failed scan status when 
   assert.equal(response.status, 201);
   const body = await response.json();
   assert.equal(body.data.id, 'token-wallet-fail');
-  assert.equal(body.data.walletScanStatus, 'failed');
-  assert.equal(body.data.walletScanError, 'scan unavailable');
-  assert.equal(body.data.scanSummary, null);
+  assert.equal(body.data.walletScanStatus, 'partial');
+  assert.equal(body.data.walletScanError, 'Failed to rescan 1 address.');
+  assert.equal(body.data.scanSummary.attemptedWalletCount, 1);
+  assert.equal(body.data.scanSummary.failedWalletCount, 1);
 });
 
 test('assets: rejects walletId that does not belong to chainId', async () => {
@@ -230,6 +239,94 @@ test('assets: adding manual token without walletId rescans all active wallets on
   assert.equal(body.data.scanSummary.mode, 'chain_wallets');
   assert.equal(body.data.scanSummary.attemptedWalletCount, 2);
   assert.equal(body.data.scanSummary.failedWalletCount, 0);
+});
+
+test('assets: first token on a chain propagates compatible active addresses before rescanning', async () => {
+  const createdWallets = [];
+  const rescannedWalletIds = [];
+  const baseUrl = await startServer(
+    createAssetsRouter({
+      chainsRepository: {
+        getChainById: async (chainId) => ({ id: chainId, family: 'evm' }),
+        listChains: async () => [
+          { id: 'chain-1', family: 'evm' },
+          { id: 'chain-2', family: 'evm' }
+        ]
+      },
+      walletsRepository: {
+        getWalletById: async () => null,
+        listWallets: async ({ chainId }) => {
+          if (!chainId) {
+            return [
+              {
+                id: 'wallet-source-1',
+                chainId: 'chain-2',
+                address: '0xAbCdEfabcdefabcdefabcdefabcdefabcdefabcd',
+                label: 'Main'
+              }
+            ];
+          }
+
+          return [
+            { id: `${chainId}-wallet-1` },
+            { id: `${chainId}-wallet-2` }
+          ];
+        },
+        getWalletByChainAndAddress: async () => null,
+        createWallet: async (wallet) => {
+          createdWallets.push(wallet);
+          return {
+            id: 'created-wallet-1',
+            ...wallet,
+            isActive: true
+          };
+        },
+        reactivateWallet: async () => null
+      },
+      manualTokenService: {
+        registerManualToken: async () => ({
+          id: 'token-1',
+          chainId: 'chain-1',
+          contractOrMint: '0xabc'
+        })
+      },
+      walletScanService: {
+        rescanWallet: async ({ walletId }) => {
+          rescannedWalletIds.push(walletId);
+          return {
+            scanRun: {
+              id: `scan-${walletId}`,
+              status: 'success'
+            }
+          };
+        }
+      },
+      trackedTokensRepository: {
+        countTrackedTokensByChain: async () => 0,
+        listTrackedTokens: async () => []
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/assets/tokens`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      chainId: 'chain-1',
+      contractOrMint: '0xabc'
+    })
+  });
+
+  assert.equal(response.status, 201);
+  const body = await response.json();
+  assert.equal(createdWallets.length, 1);
+  assert.equal(createdWallets[0].chainId, 'chain-1');
+  assert.equal(createdWallets[0].address, '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
+  assert.equal(body.data.propagationSummary.createdCount, 1);
+  assert.equal(body.data.propagationSummary.attemptedCount, 1);
+  assert.deepEqual(rescannedWalletIds, ['chain-1-wallet-1', 'chain-1-wallet-2']);
 });
 
 test('assets: adding manual token without walletId still succeeds when wallet listing fails', async () => {

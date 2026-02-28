@@ -70,11 +70,22 @@ export default function Wallets() {
   const [error, setError] = useState('');
   const [busyKey, setBusyKey] = useState('');
   const [scanResult, setScanResult] = useState(null);
+  const [chainModalOpen, setChainModalOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [expandedWalletGroups, setExpandedWalletGroups] = useState(() => new Set());
+  const [submittingChain, setSubmittingChain] = useState(false);
   const [submittingWallet, setSubmittingWallet] = useState(false);
   const [submittingToken, setSubmittingToken] = useState(false);
+  const [chainForm, setChainForm] = useState({
+    mode: 'enable',
+    existingChainId: '',
+    name: '',
+    slug: '',
+    family: 'evm',
+    chainId: '',
+    rpcUrl: ''
+  });
   const [walletForm, setWalletForm] = useState({
     chainId: '',
     address: '',
@@ -189,6 +200,61 @@ export default function Wallets() {
     });
   }, [walletGroups]);
 
+  const inactiveChains = useMemo(
+    () => chains.filter((chain) => chain?.isActive === false),
+    [chains]
+  );
+
+  async function submitChain(event) {
+    event.preventDefault();
+    setError('');
+    setSubmittingChain(true);
+
+    try {
+      if (chainForm.mode === 'enable') {
+        if (!chainForm.existingChainId) {
+          throw new Error('Select a chain to enable.');
+        }
+        const enabled = await api.setChainActivation(chainForm.existingChainId, true);
+        setTokenForm((previous) => ({
+          ...previous,
+          chainId: enabled?.id || previous.chainId
+        }));
+      } else {
+        const payload = {
+          name: chainForm.name,
+          slug: chainForm.slug,
+          family: chainForm.family,
+          rpcUrl: chainForm.rpcUrl
+        };
+        if (chainForm.family === 'evm') {
+          payload.chainId = Number(chainForm.chainId);
+        }
+        const created = await api.createChain(payload);
+        setTokenForm((previous) => ({
+          ...previous,
+          chainId: created?.id || previous.chainId
+        }));
+      }
+
+      setChainForm({
+        mode: 'enable',
+        existingChainId: '',
+        name: '',
+        slug: '',
+        family: 'evm',
+        chainId: '',
+        rpcUrl: ''
+      });
+      setChainModalOpen(false);
+      await refresh();
+    } catch (submitError) {
+      setError(submitError.message);
+    } finally {
+      setSubmittingChain(false);
+    }
+  }
+
   async function submitWallet(event) {
     event.preventDefault();
     setError('');
@@ -282,8 +348,14 @@ export default function Wallets() {
         contractOrMint: '',
         symbol: ''
       }));
+      const propagation = token.propagationSummary;
+      const propagationNote =
+        propagation &&
+        (propagation.createdCount > 0 || propagation.reactivatedCount > 0 || propagation.alreadyTrackedCount > 0)
+          ? ` Propagated addresses: +${propagation.createdCount} new, ${propagation.reactivatedCount} restored, ${propagation.alreadyTrackedCount} already tracked.`
+          : '';
       setScanResult({
-        status: token.scanSummary?.message || token.walletScanStatus,
+        status: `${token.scanSummary?.message || token.walletScanStatus || 'Token added.'}${propagationNote}`,
         error: token.walletScanError
       });
       setTokenModalOpen(false);
@@ -331,6 +403,9 @@ export default function Wallets() {
           </div>
           <div className="asset-toolbar-side">
             <div className="button-row">
+              <Button className="ap-pill-button" onPress={() => setChainModalOpen(true)}>
+                Add Chain
+              </Button>
               <Button className="ap-pill-button" onPress={() => setWalletModalOpen(true)}>
                 Add Address
               </Button>
@@ -454,6 +529,123 @@ export default function Wallets() {
           </Table>
         </CardBody>
       </Card>
+
+      {chainModalOpen ? (
+        <Modal title="Add Chain" onClose={() => setChainModalOpen(false)}>
+          <form className="form-grid" onSubmit={submitChain}>
+            <Select
+              label="Mode"
+              selectedKeys={[chainForm.mode]}
+              onSelectionChange={(keys) => {
+                const selectedMode = getFirstSelectionKey(keys, 'enable');
+                setChainForm((previous) => ({
+                  ...previous,
+                  mode: selectedMode
+                }));
+              }}
+              isRequired
+            >
+              <SelectItem key="enable">Enable existing chain</SelectItem>
+              <SelectItem key="custom">Create custom chain</SelectItem>
+            </Select>
+
+            {chainForm.mode === 'enable' ? (
+              <Select
+                label="Inactive chain"
+                selectedKeys={chainForm.existingChainId ? [chainForm.existingChainId] : []}
+                onSelectionChange={(keys) =>
+                  setChainForm((previous) => ({
+                    ...previous,
+                    existingChainId: getFirstSelectionKey(keys)
+                  }))
+                }
+                isRequired
+              >
+                {inactiveChains.map((chain) => (
+                  <SelectItem key={chain.id}>{chain.name}</SelectItem>
+                ))}
+              </Select>
+            ) : (
+              <>
+                <Input
+                  label="Chain name"
+                  value={chainForm.name}
+                  onValueChange={(value) =>
+                    setChainForm((previous) => ({
+                      ...previous,
+                      name: value
+                    }))
+                  }
+                  isRequired
+                />
+
+                <Input
+                  label="Chain slug"
+                  value={chainForm.slug}
+                  onValueChange={(value) =>
+                    setChainForm((previous) => ({
+                      ...previous,
+                      slug: value
+                    }))
+                  }
+                  isRequired
+                />
+
+                <Select
+                  label="Family"
+                  selectedKeys={[chainForm.family]}
+                  onSelectionChange={(keys) =>
+                    setChainForm((previous) => ({
+                      ...previous,
+                      family: getFirstSelectionKey(keys, 'evm')
+                    }))
+                  }
+                  isRequired
+                >
+                  <SelectItem key="evm">evm</SelectItem>
+                  <SelectItem key="solana">solana</SelectItem>
+                </Select>
+
+                {chainForm.family === 'evm' ? (
+                  <Input
+                    label="Chain ID"
+                    type="number"
+                    value={chainForm.chainId}
+                    onValueChange={(value) =>
+                      setChainForm((previous) => ({
+                        ...previous,
+                        chainId: value
+                      }))
+                    }
+                    isRequired
+                  />
+                ) : null}
+
+                <Input
+                  label="RPC URL"
+                  value={chainForm.rpcUrl}
+                  onValueChange={(value) =>
+                    setChainForm((previous) => ({
+                      ...previous,
+                      rpcUrl: value
+                    }))
+                  }
+                  isRequired
+                />
+              </>
+            )}
+
+            <div className="button-row">
+              <Button variant="flat" onPress={() => setChainModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="ap-pill-button" isLoading={submittingChain}>
+                {submittingChain ? 'Saving chain' : 'Save Chain'}
+              </Button>
+            </div>
+          </form>
+        </Modal>
+      ) : null}
 
       {walletModalOpen ? (
         <Modal title="Add Address" onClose={() => setWalletModalOpen(false)}>

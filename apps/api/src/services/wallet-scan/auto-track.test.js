@@ -285,3 +285,126 @@ test('auto-track: polygon native mapped contract alias is deduped into a single 
   assert.equal(upsertedItems.length, 1);
   assert.equal(upsertedItems[0].contractOrMint, 'native:polygon');
 });
+
+test('auto-track: rescans backfill missing tracked-token metadata from EVM RPC', async () => {
+  const upsertedRows = [];
+  const scanItems = [];
+  const calls = [];
+
+  const service = createWalletScanService({
+    chainsRepository: {
+      getChainById: async () => ({
+        id: 'chain-ronin',
+        slug: 'ronin',
+        family: 'evm',
+        rpcUrl: 'https://api.roninchain.com/rpc'
+      })
+    },
+    walletsRepository: {
+      getWalletById: async () => ({
+        id: 'wallet-ronin-1',
+        chainId: 'chain-ronin',
+        address: '0x3bd504fa02ea86ec2ad9c329bc3796d82507703f'
+      })
+    },
+    tokenUniverseRepository: {
+      getLatestScanEligibleSnapshot: async () => ({ id: 'snapshot-ronin-1' }),
+      getSnapshotItems: async () => []
+    },
+    scansRepository: {
+      createScanRun: async (input) => ({ id: 'scan-ronin-1', ...input }),
+      updateScanRun: async (id, changes) => ({ id, ...changes }),
+      upsertScanItem: async (item) => {
+        scanItems.push(item);
+        return item;
+      }
+    },
+    trackedTokensRepository: {
+      listTrackedTokens: async () => [
+        {
+          id: 'token-ronin-usdc',
+          chainId: 'chain-ronin',
+          contractOrMint: '0x0b7007c13325c48911f73a2dad5fa5dcbf808adc',
+          symbol: null,
+          name: null,
+          decimals: null,
+          metadataSource: 'auto',
+          trackingSource: 'manual'
+        }
+      ],
+      upsertTrackedToken: async (payload) => {
+        upsertedRows.push(payload);
+        return {
+          id: 'token-ronin-usdc',
+          ...payload
+        };
+      }
+    },
+    valuationService: {
+      valuatePositions: async () => [
+        {
+          contractOrMint: '0x0b7007c13325c48911f73a2dad5fa5dcbf808adc',
+          usdValue: 100,
+          valuationStatus: 'known'
+        }
+      ]
+    },
+    balanceBatcher: {
+      resolveBalances: async () => [
+        {
+          contractOrMint: '0x0b7007c13325c48911f73a2dad5fa5dcbf808adc',
+          balanceRaw: '1',
+          balanceNormalized: 1
+        }
+      ]
+    },
+    fetchImpl: async (_url, options) => {
+      const payload = JSON.parse(options.body);
+      calls.push(payload.params[0].data);
+      if (payload.params[0].data === '0x95d89b41') {
+        return {
+          ok: true,
+          json: async () => ({
+            jsonrpc: '2.0',
+            id: payload.id,
+            result:
+              '0x0000000000000000000000000000000000000000000000000000000000000020' +
+              '0000000000000000000000000000000000000000000000000000000000000004' +
+              '5553444300000000000000000000000000000000000000000000000000000000'
+          })
+        };
+      }
+      if (payload.params[0].data === '0x06fdde03') {
+        return {
+          ok: true,
+          json: async () => ({
+            jsonrpc: '2.0',
+            id: payload.id,
+            result:
+              '0x0000000000000000000000000000000000000000000000000000000000000020' +
+              '0000000000000000000000000000000000000000000000000000000000000008' +
+              '55534420436f696e000000000000000000000000000000000000000000000000'
+          })
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          jsonrpc: '2.0',
+          id: payload.id,
+          result: '0x0000000000000000000000000000000000000000000000000000000000000006'
+        })
+      };
+    }
+  });
+
+  const result = await service.runScan({ walletId: 'wallet-ronin-1' });
+
+  assert.equal(result.autoTrackedCount, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(upsertedRows.length, 1);
+  assert.equal(upsertedRows[0].symbol, 'USDC');
+  assert.equal(upsertedRows[0].name, 'USD Coin');
+  assert.equal(upsertedRows[0].decimals, 6);
+  assert.equal(scanItems[0].tokenId, 'token-ronin-usdc');
+});

@@ -187,6 +187,65 @@ test('dashboard: hides assets with usd value below $5 after aggregation', async 
   assert.equal(body.data.rows.tokens[0].usdValue, 6);
 });
 
+test('dashboard: hides assets with unknown usd valuation', async () => {
+  const baseUrl = await startServer(
+    createPortfolioRouter({
+      snapshotsRepository: {
+        getLatestDashboardPayload: async () => ({
+          latestSnapshot: {
+            id: 'snapshot-1',
+            snapshotDateUtc: '2026-02-13',
+            status: 'success',
+            finishedAt: '2026-02-13T00:00:00.000Z',
+            errorMessage: null
+          },
+          totals: {
+            portfolioUsdValue: 2000,
+            tokenUsdValue: 2000,
+            protocolUsdValue: 0
+          },
+          rows: {
+            tokens: [
+              {
+                snapshotItemId: 'known-1',
+                walletId: 'wallet-1',
+                chainId: 'ethereum',
+                contractOrMint: 'native:ethereum',
+                symbol: 'ETH',
+                quantity: 1,
+                usdPrice: 2000,
+                usdValue: 2000,
+                valuationStatus: 'known'
+              },
+              {
+                snapshotItemId: 'unknown-1',
+                walletId: 'wallet-2',
+                chainId: 'arbitrum',
+                contractOrMint: 'native:arbitrum',
+                symbol: 'ETH',
+                quantity: 0.2,
+                usdPrice: null,
+                usdValue: null,
+                valuationStatus: 'unknown'
+              }
+            ],
+            protocols: []
+          }
+        }),
+        getHistory: async () => []
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/portfolio/dashboard`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.rows.tokens.length, 1);
+  assert.equal(body.data.rows.tokens[0].symbol, 'ETH');
+  assert.equal(body.data.rows.tokens[0].chainId, 'ethereum');
+  assert.equal(body.data.rows.tokens[0].usdValue, 2000);
+});
+
 test('dashboard: prefers live wallet scan payload when available', async () => {
   const baseUrl = await startServer(
     createPortfolioRouter({

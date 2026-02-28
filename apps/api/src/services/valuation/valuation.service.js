@@ -15,6 +15,10 @@ function normalizeContract({ chain, contract }) {
   return chain?.family === 'evm' ? trimmed.toLowerCase() : trimmed;
 }
 
+function isNativeReference(contract) {
+  return typeof contract === 'string' && contract.toLowerCase().startsWith('native:');
+}
+
 export function createValuationService({
   coingeckoClient = null,
   dexFallbackClient = null,
@@ -22,13 +26,24 @@ export function createValuationService({
 } = {}) {
   async function fetchPricesWithFallback({ chain, contracts }) {
     const prices = new Map();
+    const normalizedContracts = contracts
+      .map((contract) => normalizeContract({ chain, contract }))
+      .filter((contract) => contract.length > 0);
+    const nativeRefs = [...new Set(normalizedContracts.filter((contract) => isNativeReference(contract)))];
     const uniqueContracts = [
       ...new Set(
-        contracts
-          .map((contract) => normalizeContract({ chain, contract }))
-          .filter((contract) => contract.length > 0)
+        normalizedContracts.filter((contract) => !isNativeReference(contract))
       )
     ];
+
+    if (nativeRefs.length > 0 && coingeckoClient?.getNativeUsdPrice) {
+      const nativeUsdPrice = await coingeckoClient.getNativeUsdPrice({ chain });
+      if (typeof nativeUsdPrice === 'number') {
+        for (const nativeRef of nativeRefs) {
+          prices.set(nativeRef, nativeUsdPrice);
+        }
+      }
+    }
 
     for (const group of chunk(uniqueContracts, batchSize)) {
       let primary = {};

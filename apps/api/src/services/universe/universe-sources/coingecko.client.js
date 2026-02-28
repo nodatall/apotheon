@@ -12,7 +12,8 @@ function resolveCoinGeckoPlatform(chain) {
     optimism: 'optimistic-ethereum',
     polygon: 'polygon-pos',
     bsc: 'binance-smart-chain',
-    avalanche: 'avalanche'
+    avalanche: 'avalanche',
+    ronin: 'ronin'
   };
 
   return platformBySlug[chain.slug] ?? null;
@@ -34,7 +35,8 @@ function resolveNativeCoinId(chain) {
     optimism: 'ethereum',
     polygon: 'matic-network',
     bsc: 'binancecoin',
-    avalanche: 'avalanche-2'
+    avalanche: 'avalanche-2',
+    ronin: 'ronin'
   };
 
   return coinIdBySlug[chain.slug] ?? 'ethereum';
@@ -334,8 +336,28 @@ export function createCoinGeckoClient({
     }
   }
 
+  async function getNativeUsdPrice({ chain }) {
+    const coinId = resolveNativeCoinId(chain);
+    if (!coinId) {
+      return null;
+    }
+
+    const url = createApiUrl(baseUrl, '/simple/price');
+    url.searchParams.set('ids', coinId);
+    url.searchParams.set('vs_currencies', 'usd');
+
+    try {
+      const body = await requestJson(url);
+      const value = body?.[coinId]?.usd;
+      return typeof value === 'number' ? value : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
   return {
     fetchTopTokens,
+    getNativeUsdPrice,
     getPricesByContracts,
     getTokenImagesByContracts,
     getNativeCoinImage

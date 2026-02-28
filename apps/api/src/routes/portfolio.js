@@ -215,7 +215,7 @@ function aggregateTokenRows(rows) {
 function filterTokenRowsByMinUsdValue(rows) {
   return rows.filter((row) => {
     const usdValue = toFiniteNumber(row?.usdValue);
-    return usdValue === null || usdValue >= MIN_VISIBLE_TOKEN_USD_VALUE;
+    return usdValue !== null && usdValue >= MIN_VISIBLE_TOKEN_USD_VALUE;
   });
 }
 
