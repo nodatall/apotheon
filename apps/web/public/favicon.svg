@@ -1,31 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <radialGradient id="bgRadial" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 256) rotate(90) scale(256)">
-      <stop offset="0" stop-color="#1D2537" />
-      <stop offset="1" stop-color="#0F1522" />
-    </radialGradient>
-    <linearGradient id="ringTop" x1="118" y1="170" x2="394" y2="170" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#6D33B8" />
-      <stop offset="1" stop-color="#A84CFF" />
-    </linearGradient>
-    <linearGradient id="ringBottom" x1="128" y1="420" x2="384" y2="420" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4A4D84" />
-      <stop offset="1" stop-color="#7B3EC6" />
-    </linearGradient>
-    <linearGradient id="mark" x1="130" y1="146" x2="382" y2="400" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFFFFF" />
-      <stop offset="1" stop-color="#E8E8EE" />
+    <linearGradient id="ringGradient" x1="92" y1="420" x2="420" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6C3CF1" />
+      <stop offset="0.52" stop-color="#9F58FF" />
+      <stop offset="1" stop-color="#D48DFF" />
     </linearGradient>
   </defs>
-
-  <circle cx="256" cy="256" r="250" fill="url(#bgRadial)" />
-  <circle cx="256" cy="256" r="250" stroke="#0B1019" stroke-width="8" />
-
-  <path d="M118 170A190 190 0 0 1 394 170" stroke="url(#ringTop)" stroke-width="34" stroke-linecap="round" />
-  <path d="M128 338A190 190 0 0 0 224 452" stroke="url(#ringBottom)" stroke-width="34" stroke-linecap="round" />
-  <path d="M384 338A190 190 0 0 1 288 452" stroke="url(#ringBottom)" stroke-width="34" stroke-linecap="round" />
-
-  <path d="M82 186L194 198V240L150 328L122 286L122 222L82 186Z" fill="url(#mark)" stroke="#0E1320" stroke-width="2" />
-  <path d="M430 186L318 198V240L362 328L390 286L390 222L430 186Z" fill="url(#mark)" stroke="#0E1320" stroke-width="2" />
-  <path d="M256 138L138 392H194L214 342H298L318 392H374L256 138ZM232 294L256 240L280 294H232Z" fill="url(#mark)" stroke="#0E1320" stroke-width="2" />
+  <circle cx="256" cy="256" r="184" stroke="url(#ringGradient)" stroke-width="72" />
 </svg>
