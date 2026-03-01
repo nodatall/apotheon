@@ -68,18 +68,15 @@ export default function Wallets() {
   const [wallets, setWallets] = useState([]);
   const [chains, setChains] = useState([]);
   const [error, setError] = useState('');
-  const [busyKey, setBusyKey] = useState('');
   const [scanResult, setScanResult] = useState(null);
   const [chainModalOpen, setChainModalOpen] = useState(false);
   const [walletModalOpen, setWalletModalOpen] = useState(false);
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
-  const [expandedWalletGroups, setExpandedWalletGroups] = useState(() => new Set());
+  const [selectedWalletGroupId, setSelectedWalletGroupId] = useState('');
   const [submittingChain, setSubmittingChain] = useState(false);
   const [submittingWallet, setSubmittingWallet] = useState(false);
   const [submittingToken, setSubmittingToken] = useState(false);
   const [chainForm, setChainForm] = useState({
-    mode: 'enable',
-    existingChainId: '',
     name: '',
     slug: '',
     family: 'evm',
@@ -165,6 +162,12 @@ export default function Wallets() {
           const rightChain = chainNameById.get(right.chainId) || right.chainId || '';
           return leftChain.localeCompare(rightChain);
         });
+        const uniqueChainIds = Array.from(
+          new Set(sortedWallets.map((wallet) => wallet.chainId).filter(Boolean))
+        );
+        const chainLabels = uniqueChainIds
+          .map((chainId) => chainNameById.get(chainId) || chainId)
+          .filter(Boolean);
         const uniqueAddresses = Array.from(
           new Set(sortedWallets.map((wallet) => wallet.address).filter(Boolean))
         );
@@ -175,10 +178,16 @@ export default function Wallets() {
         const addressSuffix = uniqueAddresses.length > 1
           ? ` +${uniqueAddresses.length - 1}`
           : '';
+        const chainSummary = chainLabels.length <= 3
+          ? (chainLabels.join(', ') || '-')
+          : `${chainLabels.slice(0, 3).join(', ')} +${chainLabels.length - 3}`;
 
         return {
           ...group,
-          chainCount: sortedWallets.length,
+          chainCount: chainLabels.length,
+          chainLabels,
+          chainSummary,
+          chainTitle: chainLabels.join(', '),
           displayLabel: group.label || shortAddress(primaryAddress) || '-',
           wallets: sortedWallets,
           primaryAddress,
@@ -190,19 +199,19 @@ export default function Wallets() {
   }, [wallets, chainNameById]);
 
   useEffect(() => {
-    const groupIds = new Set(walletGroups.map((group) => group.id));
-    setExpandedWalletGroups((previous) => {
-      const next = new Set([...previous].filter((groupId) => groupIds.has(groupId)));
-      if (next.size === previous.size) {
-        return previous;
-      }
-      return next;
-    });
-  }, [walletGroups]);
+    if (!selectedWalletGroupId) {
+      return;
+    }
 
-  const inactiveChains = useMemo(
-    () => chains.filter((chain) => chain?.isActive === false),
-    [chains]
+    const groupStillExists = walletGroups.some((group) => group.id === selectedWalletGroupId);
+    if (!groupStillExists) {
+      setSelectedWalletGroupId('');
+    }
+  }, [walletGroups, selectedWalletGroupId]);
+
+  const selectedWalletGroup = useMemo(
+    () => walletGroups.find((group) => group.id === selectedWalletGroupId) || null,
+    [walletGroups, selectedWalletGroupId]
   );
 
   async function submitChain(event) {
@@ -211,35 +220,22 @@ export default function Wallets() {
     setSubmittingChain(true);
 
     try {
-      if (chainForm.mode === 'enable') {
-        if (!chainForm.existingChainId) {
-          throw new Error('Select a chain to enable.');
-        }
-        const enabled = await api.setChainActivation(chainForm.existingChainId, true);
-        setTokenForm((previous) => ({
-          ...previous,
-          chainId: enabled?.id || previous.chainId
-        }));
-      } else {
-        const payload = {
-          name: chainForm.name,
-          slug: chainForm.slug,
-          family: chainForm.family,
-          rpcUrl: chainForm.rpcUrl
-        };
-        if (chainForm.family === 'evm') {
-          payload.chainId = Number(chainForm.chainId);
-        }
-        const created = await api.createChain(payload);
-        setTokenForm((previous) => ({
-          ...previous,
-          chainId: created?.id || previous.chainId
-        }));
+      const payload = {
+        name: chainForm.name,
+        slug: chainForm.slug,
+        family: chainForm.family,
+        rpcUrl: chainForm.rpcUrl
+      };
+      if (chainForm.family === 'evm') {
+        payload.chainId = Number(chainForm.chainId);
       }
+      const created = await api.createChain(payload);
+      setTokenForm((previous) => ({
+        ...previous,
+        chainId: created?.id || previous.chainId
+      }));
 
       setChainForm({
-        mode: 'enable',
-        existingChainId: '',
         name: '',
         slug: '',
         family: 'evm',
@@ -367,32 +363,6 @@ export default function Wallets() {
     }
   }
 
-  async function removeWallet(walletId) {
-    setError('');
-    setBusyKey(`wallet-${walletId}`);
-
-    try {
-      await api.setWalletActivation(walletId, false);
-      await refresh();
-    } catch (removeError) {
-      setError(removeError.message);
-    } finally {
-      setBusyKey('');
-    }
-  }
-
-  function toggleWalletGroup(groupId) {
-    setExpandedWalletGroups((previous) => {
-      const next = new Set(previous);
-      if (next.has(groupId)) {
-        next.delete(groupId);
-      } else {
-        next.add(groupId);
-      }
-      return next;
-    });
-  }
-
   return (
     <div className="page-grid">
       <Card className="hero-card">
@@ -439,92 +409,34 @@ export default function Wallets() {
               <TableColumn>Label</TableColumn>
               <TableColumn>Address</TableColumn>
               <TableColumn>Chain</TableColumn>
-              <TableColumn className="text-right">Action</TableColumn>
             </TableHeader>
             <TableBody emptyContent="No addresses added yet.">
-              {walletGroups.flatMap((group) => {
-                const isExpanded = expandedWalletGroups.has(group.id);
-                const hasChildren = group.chainCount > 1;
-                const primaryWallet = group.wallets[0] || null;
-                const parentChainLabel = hasChildren
-                  ? `${group.chainCount} chains`
-                  : (primaryWallet
-                    ? (chainNameById.get(primaryWallet.chainId) || primaryWallet.chainId || '-')
-                    : '-');
-                const rows = [
-                  <TableRow key={`group-${group.id}`}>
-                    <TableCell>
-                      <span>{group.displayLabel}</span>
-                    </TableCell>
-                    <TableCell title={group.addressTitle || '-'}>
-                      {group.addressDisplay || '-'}
-                    </TableCell>
-                    <TableCell>{parentChainLabel}</TableCell>
-                    <TableCell className="text-right">
-                      {hasChildren ? (
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          onPress={() => toggleWalletGroup(group.id)}
-                          aria-expanded={isExpanded}
-                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${group.displayLabel}`}
-                          title={isExpanded ? 'Collapse' : 'Expand'}
-                        >
-                          <span className="wallet-group-expand-icon" aria-hidden="true">
-                            {isExpanded ? '▾' : '▸'}
-                          </span>
-                        </Button>
-                      ) : (primaryWallet ? (
-                        <Button
-                          isIconOnly
-                          size="sm"
-                          variant="light"
-                          color="danger"
-                          title="Remove address"
-                          aria-label="Remove address"
-                          onPress={() => removeWallet(primaryWallet.id)}
-                          isLoading={busyKey === `wallet-${primaryWallet.id}`}
-                        >
-                          ×
-                        </Button>
-                      ) : null)}
-                    </TableCell>
-                  </TableRow>
-                ];
-
-                if (hasChildren && isExpanded) {
-                  for (const wallet of group.wallets) {
-                    rows.push(
-                      <TableRow key={`group-${group.id}-wallet-${wallet.id}`}>
-                        <TableCell>
-                          <span className="wallet-group-child-label">
-                            {wallet.label || '-'}
-                          </span>
-                        </TableCell>
-                        <TableCell title={wallet.address || '-'}>{shortAddress(wallet.address || '-')}</TableCell>
-                        <TableCell>{chainNameById.get(wallet.chainId) || wallet.chainId || '-'}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            isIconOnly
-                            size="sm"
-                            variant="light"
-                            color="danger"
-                            title="Remove address"
-                            aria-label="Remove address"
-                            onPress={() => removeWallet(wallet.id)}
-                            isLoading={busyKey === `wallet-${wallet.id}`}
-                          >
-                            ×
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }
-                }
-
-                return rows;
-              })}
+              {walletGroups.map((group) => (
+                <TableRow
+                  key={`group-${group.id}`}
+                  className="wallet-row-clickable"
+                  tabIndex={0}
+                  onClick={() => setSelectedWalletGroupId(group.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedWalletGroupId(group.id);
+                    }
+                  }}
+                >
+                  <TableCell>
+                    <span>{group.displayLabel}</span>
+                  </TableCell>
+                  <TableCell title={group.addressTitle || '-'}>
+                    {group.addressDisplay || '-'}
+                  </TableCell>
+                  <TableCell title={group.chainTitle || '-'}>
+                    <span className="wallet-chain-summary">
+                      {group.chainSummary || '-'}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))}
             </TableBody>
           </Table>
         </CardBody>
@@ -533,107 +445,71 @@ export default function Wallets() {
       {chainModalOpen ? (
         <Modal title="Add Chain" onClose={() => setChainModalOpen(false)}>
           <form className="form-grid" onSubmit={submitChain}>
-            <Select
-              label="Mode"
-              selectedKeys={[chainForm.mode]}
-              onSelectionChange={(keys) => {
-                const selectedMode = getFirstSelectionKey(keys, 'enable');
+            <Input
+              label="Chain name"
+              value={chainForm.name}
+              onValueChange={(value) =>
                 setChainForm((previous) => ({
                   ...previous,
-                  mode: selectedMode
-                }));
-              }}
+                  name: value
+                }))
+              }
+              isRequired
+            />
+
+            <Input
+              label="Chain slug"
+              value={chainForm.slug}
+              onValueChange={(value) =>
+                setChainForm((previous) => ({
+                  ...previous,
+                  slug: value
+                }))
+              }
+              isRequired
+            />
+
+            <Select
+              label="Family"
+              selectedKeys={[chainForm.family]}
+              onSelectionChange={(keys) =>
+                setChainForm((previous) => ({
+                  ...previous,
+                  family: getFirstSelectionKey(keys, 'evm')
+                }))
+              }
               isRequired
             >
-              <SelectItem key="enable">Enable existing chain</SelectItem>
-              <SelectItem key="custom">Create custom chain</SelectItem>
+              <SelectItem key="evm">evm</SelectItem>
+              <SelectItem key="solana">solana</SelectItem>
             </Select>
 
-            {chainForm.mode === 'enable' ? (
-              <Select
-                label="Inactive chain"
-                selectedKeys={chainForm.existingChainId ? [chainForm.existingChainId] : []}
-                onSelectionChange={(keys) =>
+            {chainForm.family === 'evm' ? (
+              <Input
+                label="Chain ID"
+                type="number"
+                value={chainForm.chainId}
+                onValueChange={(value) =>
                   setChainForm((previous) => ({
                     ...previous,
-                    existingChainId: getFirstSelectionKey(keys)
+                    chainId: value
                   }))
                 }
                 isRequired
-              >
-                {inactiveChains.map((chain) => (
-                  <SelectItem key={chain.id}>{chain.name}</SelectItem>
-                ))}
-              </Select>
-            ) : (
-              <>
-                <Input
-                  label="Chain name"
-                  value={chainForm.name}
-                  onValueChange={(value) =>
-                    setChainForm((previous) => ({
-                      ...previous,
-                      name: value
-                    }))
-                  }
-                  isRequired
-                />
+              />
+            ) : null}
 
-                <Input
-                  label="Chain slug"
-                  value={chainForm.slug}
-                  onValueChange={(value) =>
-                    setChainForm((previous) => ({
-                      ...previous,
-                      slug: value
-                    }))
-                  }
-                  isRequired
-                />
-
-                <Select
-                  label="Family"
-                  selectedKeys={[chainForm.family]}
-                  onSelectionChange={(keys) =>
-                    setChainForm((previous) => ({
-                      ...previous,
-                      family: getFirstSelectionKey(keys, 'evm')
-                    }))
-                  }
-                  isRequired
-                >
-                  <SelectItem key="evm">evm</SelectItem>
-                  <SelectItem key="solana">solana</SelectItem>
-                </Select>
-
-                {chainForm.family === 'evm' ? (
-                  <Input
-                    label="Chain ID"
-                    type="number"
-                    value={chainForm.chainId}
-                    onValueChange={(value) =>
-                      setChainForm((previous) => ({
-                        ...previous,
-                        chainId: value
-                      }))
-                    }
-                    isRequired
-                  />
-                ) : null}
-
-                <Input
-                  label="RPC URL"
-                  value={chainForm.rpcUrl}
-                  onValueChange={(value) =>
-                    setChainForm((previous) => ({
-                      ...previous,
-                      rpcUrl: value
-                    }))
-                  }
-                  isRequired
-                />
-              </>
-            )}
+            <Input
+              label="RPC URL"
+              value={chainForm.rpcUrl}
+              onValueChange={(value) =>
+                setChainForm((previous) => ({
+                  ...previous,
+                  rpcUrl: value
+                }))
+              }
+              isRequired
+            />
 
             <div className="button-row">
               <Button variant="flat" onPress={() => setChainModalOpen(false)}>
@@ -753,6 +629,26 @@ export default function Wallets() {
               </Button>
             </div>
           </form>
+        </Modal>
+      ) : null}
+
+      {selectedWalletGroup ? (
+        <Modal
+          title={`Supported Chains • ${selectedWalletGroup.displayLabel}`}
+          onClose={() => setSelectedWalletGroupId('')}
+        >
+          <div className="wallet-group-details">
+            <p className="muted">Address: {selectedWalletGroup.primaryAddress || '-'}</p>
+            <ul className="wallet-group-chain-list">
+              {selectedWalletGroup.chainLabels.length > 0 ? (
+                selectedWalletGroup.chainLabels.map((chainLabel) => (
+                  <li key={`${selectedWalletGroup.id}-${chainLabel}`}>{chainLabel}</li>
+                ))
+              ) : (
+                <li>-</li>
+              )}
+            </ul>
+          </div>
         </Modal>
       ) : null}
     </div>

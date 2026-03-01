@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Button,
   Modal as HeroModal,
   ModalBody,
   ModalContent,
@@ -23,12 +22,7 @@ export default function Modal({ title, onClose, children }) {
       <ModalContent>
         {() => (
           <>
-            <ModalHeader className="flex items-center justify-between gap-3">
-              <span>{title}</span>
-              <Button isIconOnly size="sm" variant="light" onPress={onClose} aria-label="Close modal">
-                ×
-              </Button>
-            </ModalHeader>
+            <ModalHeader>{title}</ModalHeader>
             <ModalBody className="pb-6">{children}</ModalBody>
           </>
         )}

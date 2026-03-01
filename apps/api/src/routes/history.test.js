@@ -187,7 +187,7 @@ test('dashboard: hides assets with usd value below $5 after aggregation', async 
   assert.equal(body.data.rows.tokens[0].usdValue, 6);
 });
 
-test('dashboard: hides assets with unknown usd valuation', async () => {
+test('dashboard: hides unknown-valuation rows when a known row exists for the same symbol', async () => {
   const baseUrl = await startServer(
     createPortfolioRouter({
       snapshotsRepository: {
@@ -244,6 +244,124 @@ test('dashboard: hides assets with unknown usd valuation', async () => {
   assert.equal(body.data.rows.tokens[0].symbol, 'ETH');
   assert.equal(body.data.rows.tokens[0].chainId, 'ethereum');
   assert.equal(body.data.rows.tokens[0].usdValue, 2000);
+});
+
+test('dashboard: keeps unknown-valuation rows when symbol has no known-valued counterpart', async () => {
+  const baseUrl = await startServer(
+    createPortfolioRouter({
+      snapshotsRepository: {
+        getLatestDashboardPayload: async () => ({
+          latestSnapshot: {
+            id: 'snapshot-1',
+            snapshotDateUtc: '2026-02-13',
+            status: 'success',
+            finishedAt: '2026-02-13T00:00:00.000Z',
+            errorMessage: null
+          },
+          totals: {
+            portfolioUsdValue: 2000,
+            tokenUsdValue: 2000,
+            protocolUsdValue: 0
+          },
+          rows: {
+            tokens: [
+              {
+                snapshotItemId: 'known-1',
+                walletId: 'wallet-1',
+                chainId: 'ethereum',
+                contractOrMint: 'native:ethereum',
+                symbol: 'ETH',
+                quantity: 1,
+                usdPrice: 2000,
+                usdValue: 2000,
+                valuationStatus: 'known'
+              },
+              {
+                snapshotItemId: 'unknown-1',
+                walletId: 'wallet-2',
+                chainId: 'beam',
+                contractOrMint: '0xath',
+                symbol: 'ATH',
+                quantity: 1000,
+                usdPrice: null,
+                usdValue: null,
+                valuationStatus: 'unknown'
+              }
+            ],
+            protocols: []
+          }
+        }),
+        getHistory: async () => []
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/portfolio/dashboard`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.rows.tokens.length, 2);
+  assert.equal(body.data.rows.tokens[0].symbol, 'ETH');
+  assert.equal(body.data.rows.tokens[1].symbol, 'ATH');
+  assert.equal(body.data.rows.tokens[1].usdValue, null);
+});
+
+test('dashboard: aggregation prefers known valuation status when usd value is present', async () => {
+  const baseUrl = await startServer(
+    createPortfolioRouter({
+      snapshotsRepository: {
+        getLatestDashboardPayload: async () => ({
+          latestSnapshot: {
+            id: 'snapshot-1',
+            snapshotDateUtc: '2026-02-13',
+            status: 'success',
+            finishedAt: '2026-02-13T00:00:00.000Z',
+            errorMessage: null
+          },
+          totals: {
+            portfolioUsdValue: 50,
+            tokenUsdValue: 50,
+            protocolUsdValue: 0
+          },
+          rows: {
+            tokens: [
+              {
+                snapshotItemId: 'known-avax',
+                walletId: 'wallet-1',
+                chainId: 'avalanche',
+                contractOrMint: 'native:avalanche',
+                symbol: 'AVAX',
+                quantity: 1,
+                usdPrice: 10,
+                usdValue: 10,
+                valuationStatus: 'known'
+              },
+              {
+                snapshotItemId: 'unknown-avax',
+                walletId: 'wallet-2',
+                chainId: 'avalanche',
+                contractOrMint: 'native:avalanche',
+                symbol: 'AVAX',
+                quantity: 4,
+                usdPrice: null,
+                usdValue: null,
+                valuationStatus: 'unknown'
+              }
+            ],
+            protocols: []
+          }
+        }),
+        getHistory: async () => []
+      }
+    })
+  );
+
+  const response = await fetch(`${baseUrl}/api/portfolio/dashboard`);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.data.rows.tokens.length, 1);
+  assert.equal(body.data.rows.tokens[0].symbol, 'AVAX');
+  assert.equal(body.data.rows.tokens[0].usdValue, 10);
+  assert.equal(body.data.rows.tokens[0].valuationStatus, 'known');
 });
 
 test('dashboard: prefers live wallet scan payload when available', async () => {

@@ -111,6 +111,104 @@ test('auto-track: scan includes manually tracked tokens and preserves token link
   assert.equal(manualTokenRow.valuationStatus, 'known');
 });
 
+test('auto-track: falls back to latest known scan prices when live valuation is unknown', async () => {
+  const upsertedItems = [];
+
+  const service = createWalletScanService({
+    chainsRepository: {
+      getChainById: async () => ({ id: 'chain-ronin', slug: 'ronin', family: 'evm' })
+    },
+    walletsRepository: {
+      getWalletById: async () => ({
+        id: 'wallet-ronin-1',
+        chainId: 'chain-ronin',
+        address: '0x3bdde7d9f8b3cc3583a41b5e12244924b371e17f'
+      })
+    },
+    tokenUniverseRepository: {
+      getLatestScanEligibleSnapshot: async () => ({ id: 'snapshot-ronin-1' }),
+      getSnapshotItems: async () => []
+    },
+    scansRepository: {
+      createScanRun: async (input) => ({ id: 'scan-ronin-1', ...input }),
+      updateScanRun: async (id, changes) => ({ id, ...changes }),
+      upsertScanItem: async (item) => {
+        upsertedItems.push(item);
+        return item;
+      },
+      getLatestKnownUsdPricesByContracts: async ({ contracts }) => {
+        assert.deepEqual(contracts.sort(), [
+          '0x394cef8bdd737ee24dbc9f43d0d5d2ab83136054',
+          'native:ronin'
+        ]);
+        return {
+          '0x394cef8bdd737ee24dbc9f43d0d5d2ab83136054': 1.86,
+          'native:ronin': 0.103
+        };
+      }
+    },
+    trackedTokensRepository: {
+      listTrackedTokens: async () => [
+        {
+          id: 'token-power',
+          chainId: 'chain-ronin',
+          contractOrMint: '0x394cef8bdd737ee24dbc9f43d0d5d2ab83136054',
+          symbol: 'POWER',
+          decimals: 18
+        },
+        {
+          id: 'token-ron',
+          chainId: 'chain-ronin',
+          contractOrMint: 'native:ronin',
+          symbol: 'RON',
+          decimals: 18
+        }
+      ],
+      upsertTrackedToken: async () => ({ id: 'unused-auto-token' })
+    },
+    valuationService: {
+      valuatePositions: async () => [
+        {
+          contractOrMint: '0x394cef8bdd737ee24dbc9f43d0d5d2ab83136054',
+          usdValue: null,
+          valuationStatus: 'unknown'
+        },
+        {
+          contractOrMint: 'native:ronin',
+          usdValue: null,
+          valuationStatus: 'unknown'
+        }
+      ]
+    },
+    balanceBatcher: {
+      resolveBalances: async () => [
+        {
+          contractOrMint: '0x394cef8bdd737ee24dbc9f43d0d5d2ab83136054',
+          balanceRaw: '107300000000000000',
+          balanceNormalized: 0.1073
+        },
+        {
+          contractOrMint: 'native:ronin',
+          balanceRaw: '2676795352282767500000',
+          balanceNormalized: 2676.7953522827675
+        }
+      ]
+    }
+  });
+
+  await service.runScan({ walletId: 'wallet-ronin-1' });
+
+  const powerRow = upsertedItems.find(
+    (item) => item.contractOrMint === '0x394cef8bdd737ee24dbc9f43d0d5d2ab83136054'
+  );
+  assert.equal(powerRow.valuationStatus, 'known');
+  assert.ok(Number(powerRow.usdValue) > 0.19 && Number(powerRow.usdValue) < 0.21);
+
+  const ronRow = upsertedItems.find((item) => item.contractOrMint === 'native:ronin');
+  assert.equal(ronRow.valuationStatus, 'known');
+  assert.ok(Number(ronRow.usdValue) > 275 && Number(ronRow.usdValue) < 277);
+});
+
 test('auto-track: evm native asset is scanned and valued through wrapped native contract', async () => {
   const upsertedItems = [];
   let seenNativeToken = false;

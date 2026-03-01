@@ -43,6 +43,10 @@ const EVM_NATIVE_ASSETS = {
     symbol: 'AVAX',
     wrappedContract: '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7'
   },
+  beam: {
+    symbol: 'BEAM',
+    wrappedContract: null
+  },
   ronin: {
     symbol: 'RON',
     wrappedContract: null
@@ -473,7 +477,55 @@ export function createWalletScanService({
         });
       }
     } catch (_error) {
-      return valuationByContract;
+      // Ignore provider failures and continue to historical fallback below.
+    }
+
+    if (scansRepository?.getLatestKnownUsdPricesByContracts) {
+      const missingContracts = [];
+      const quantityByContract = new Map();
+
+      for (const position of heldPositions) {
+        const normalizedContract = normalizeAddressForChain({
+          family: chain.family,
+          address: position.contractOrMint
+        });
+        if (!normalizedContract) {
+          continue;
+        }
+
+        quantityByContract.set(normalizedContract, Number(position.quantity) || 0);
+        const current = valuationByContract.get(normalizedContract);
+        if (!current || current.valuationStatus !== 'known' || typeof current.usdValue !== 'number') {
+          missingContracts.push(normalizedContract);
+        }
+      }
+
+      if (missingContracts.length > 0) {
+        try {
+          const latestKnownUsdPrices = await scansRepository.getLatestKnownUsdPricesByContracts({
+            chainId: chain.id,
+            contracts: missingContracts
+          });
+
+          for (const contract of missingContracts) {
+            const price = latestKnownUsdPrices?.[contract];
+            const quantity = quantityByContract.get(contract) ?? 0;
+            if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0) {
+              continue;
+            }
+            if (!Number.isFinite(quantity) || quantity <= 0) {
+              continue;
+            }
+
+            valuationByContract.set(contract, {
+              usdValue: quantity * price,
+              valuationStatus: 'known'
+            });
+          }
+        } catch (_error) {
+          // Keep unknown valuation when historical fallback lookup fails.
+        }
+      }
     }
 
     return valuationByContract;

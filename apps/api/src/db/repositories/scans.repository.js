@@ -279,9 +279,70 @@ export function createScansRepository({ pool }) {
     };
   }
 
+  async function getLatestKnownUsdPricesByContracts({ chainId, contracts }) {
+    if (typeof chainId !== 'string' || chainId.trim().length === 0) {
+      return {};
+    }
+
+    const normalizedContracts = [
+      ...new Set(
+        (Array.isArray(contracts) ? contracts : [])
+          .map((contract) =>
+            typeof contract === 'string' ? contract.trim().toLowerCase() : ''
+          )
+          .filter((contract) => contract.length > 0)
+      )
+    ];
+    if (normalizedContracts.length === 0) {
+      return {};
+    }
+
+    const { rows } = await pool.query(
+      `
+        WITH ranked AS (
+          SELECT
+            LOWER(wusi.contract_or_mint) AS contract_key,
+            (wusi.usd_value / NULLIF(wusi.balance_normalized, 0))::DOUBLE PRECISION AS usd_price,
+            ROW_NUMBER() OVER (
+              PARTITION BY LOWER(wusi.contract_or_mint)
+              ORDER BY wus.created_at DESC, wusi.id DESC
+            ) AS row_rank
+          FROM wallet_universe_scan_items wusi
+          JOIN wallet_universe_scans wus ON wus.id = wusi.scan_id
+          WHERE wus.chain_id = $1
+            AND wus.status IN ('success', 'partial')
+            AND wusi.valuation_status = 'known'
+            AND wusi.usd_value IS NOT NULL
+            AND wusi.balance_normalized > 0
+            AND LOWER(wusi.contract_or_mint) = ANY($2::text[])
+        )
+        SELECT contract_key, usd_price
+        FROM ranked
+        WHERE row_rank = 1
+      `,
+      [chainId, normalizedContracts]
+    );
+
+    const pricesByContract = {};
+    for (const row of rows) {
+      const contract = typeof row.contract_key === 'string' ? row.contract_key : '';
+      const usdPrice =
+        row.usd_price === null || row.usd_price === undefined
+          ? null
+          : Number(row.usd_price);
+      if (!contract || typeof usdPrice !== 'number' || !Number.isFinite(usdPrice) || usdPrice <= 0) {
+        continue;
+      }
+      pricesByContract[contract] = usdPrice;
+    }
+
+    return pricesByContract;
+  }
+
   return {
     createScanRun,
     getLatestScanByWallet,
+    getLatestKnownUsdPricesByContracts,
     getLatestDashboardPayloadFromScans,
     getLatestSuccessfulScanItemsByWallet,
     listScanItems,

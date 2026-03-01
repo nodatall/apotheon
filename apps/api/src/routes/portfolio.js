@@ -207,15 +207,48 @@ function aggregateTokenRows(rows) {
       quantity: entry.quantityTotal,
       usdValue,
       usdPrice,
-      valuationStatus: entry.hasUnknownValuation ? 'unknown' : 'known'
+      valuationStatus: entry.hasUsdValue ? 'known' : 'unknown'
     };
   });
 }
 
 function filterTokenRowsByMinUsdValue(rows) {
+  const knownSymbols = new Set();
+
+  for (const row of rows) {
+    const usdValue = toFiniteNumber(row?.usdValue);
+    if (usdValue === null || usdValue < MIN_VISIBLE_TOKEN_USD_VALUE) {
+      continue;
+    }
+
+    const symbol = normalizeString(row?.symbol);
+    if (symbol) {
+      knownSymbols.add(symbol.toUpperCase());
+    }
+  }
+
   return rows.filter((row) => {
     const usdValue = toFiniteNumber(row?.usdValue);
-    return usdValue !== null && usdValue >= MIN_VISIBLE_TOKEN_USD_VALUE;
+    if (usdValue !== null) {
+      return usdValue >= MIN_VISIBLE_TOKEN_USD_VALUE;
+    }
+
+    const valuationStatus = normalizeString(row?.valuationStatus);
+    if (valuationStatus !== 'unknown') {
+      return false;
+    }
+
+    const quantity = toFiniteNumber(row?.quantity) ?? 0;
+    if (quantity <= 0) {
+      return false;
+    }
+
+    const symbol = normalizeString(row?.symbol);
+    if (!symbol) {
+      return true;
+    }
+
+    return !knownSymbols.has(symbol.toUpperCase());
   });
 }
 

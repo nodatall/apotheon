@@ -6,7 +6,21 @@ const EVM_NATIVE_SYMBOL_BY_SLUG = {
   polygon: 'MATIC',
   bsc: 'BNB',
   avalanche: 'AVAX',
+  beam: 'BEAM',
   ronin: 'RON'
+};
+
+const ATH_ICON_URL =
+  'https://coin-images.coingecko.com/coins/images/36179/small/logogram_circle_dark_green_vb_green_%281%29.png?1718232706';
+
+const ICON_OVERRIDE_BY_CHAIN_AND_CONTRACT = {
+  'beam:0x02d6d189078bde6d548e0664b61dd7acea96f0aa': ATH_ICON_URL,
+  'arbitrum:0xc87b37a581ec3257b734886d9d3a581f5a9d056c': ATH_ICON_URL,
+  'ethereum:0xbe0ed4138121ecfc5c0e56b40517da27e6c5226b': ATH_ICON_URL
+};
+
+const ICON_OVERRIDE_BY_SYMBOL = {
+  ATH: ATH_ICON_URL
 };
 
 function resolveNativeSymbol(chain) {
@@ -53,6 +67,27 @@ function toCacheKey(chainId, tokenRef) {
   return `${chainId}:${tokenRef}`;
 }
 
+function resolveIconOverride({ chain, row, normalizedContract }) {
+  if (!chain) {
+    return null;
+  }
+
+  if (normalizedContract) {
+    const byContract = ICON_OVERRIDE_BY_CHAIN_AND_CONTRACT[`${chain.slug}:${normalizedContract}`];
+    if (typeof byContract === 'string' && byContract.length > 0) {
+      return byContract;
+    }
+  }
+
+  const symbol = typeof row?.symbol === 'string' ? row.symbol.trim().toUpperCase() : '';
+  if (!symbol) {
+    return null;
+  }
+
+  const bySymbol = ICON_OVERRIDE_BY_SYMBOL[symbol];
+  return typeof bySymbol === 'string' && bySymbol.length > 0 ? bySymbol : null;
+}
+
 export function createTokenIconService({
   chainsRepository,
   coingeckoClient,
@@ -94,6 +129,19 @@ export function createTokenIconService({
 
       const normalizedContract = normalizeContractForChain(chain, row.contractOrMint);
       if (!normalizedContract) {
+        continue;
+      }
+
+      const iconOverride = resolveIconOverride({
+        chain,
+        row,
+        normalizedContract
+      });
+      if (iconOverride) {
+        iconCache.set(toCacheKey(chainId, normalizedContract), {
+          imageUrl: iconOverride,
+          expiresAt: now + cacheTtlMs
+        });
         continue;
       }
 
@@ -171,6 +219,18 @@ export function createTokenIconService({
       const normalizedContract = normalizeContractForChain(chain, row.contractOrMint);
       if (!normalizedContract) {
         return { ...row, iconUrl: null };
+      }
+
+      const iconOverride = resolveIconOverride({
+        chain,
+        row,
+        normalizedContract
+      });
+      if (iconOverride) {
+        return {
+          ...row,
+          iconUrl: iconOverride
+        };
       }
 
       const cacheEntry = iconCache.get(toCacheKey(chainId, normalizedContract));

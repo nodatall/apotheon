@@ -343,16 +343,42 @@ p {
   letter-spacing: 0.02em;
 }
 
-.wallet-group-expand-icon {
-  font-size: 0.95rem;
-  line-height: 1;
+.wallet-row-clickable {
+  cursor: pointer;
 }
 
-.wallet-group-child-label {
-  display: inline-flex;
-  align-items: center;
-  padding-left: 1.22rem;
-  color: var(--ap-text-muted);
+.wallet-row-clickable td {
+  transition: background-color 140ms ease;
+}
+
+.wallet-row-clickable:hover td,
+.wallet-row-clickable:focus-visible td {
+  background: color-mix(in srgb, var(--ap-accent-primary) 10%, transparent);
+}
+
+.wallet-row-clickable:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--ap-accent-primary) 62%, transparent);
+  outline-offset: -1px;
+}
+
+.wallet-chain-summary {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wallet-group-details {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.wallet-group-chain-list {
+  margin: 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.4rem;
 }
 
 .history-chart {

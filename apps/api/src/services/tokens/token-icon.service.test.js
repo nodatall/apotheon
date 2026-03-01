@@ -47,3 +47,28 @@ test('token icon service treats missing contract + native symbol as native row',
 
   assert.equal(rows[0].iconUrl, 'https://icons.example/sol.png');
 });
+
+test('token icon service applies ATH override icon when contract image lookup is missing', async () => {
+  const service = createTokenIconService({
+    chainsRepository: {
+      getChainById: async () => ({ id: 'chain-beam', slug: 'beam', family: 'evm' })
+    },
+    coingeckoClient: {
+      getNativeCoinImage: async () => null,
+      getTokenImagesByContracts: async () => ({})
+    }
+  });
+
+  const rows = await service.enrichTokenRows([
+    {
+      chainId: 'chain-beam',
+      contractOrMint: '0x02d6d189078bde6d548e0664b61dd7acea96f0aa',
+      symbol: 'ATH'
+    }
+  ]);
+
+  assert.equal(
+    rows[0].iconUrl,
+    'https://coin-images.coingecko.com/coins/images/36179/small/logogram_circle_dark_green_vb_green_%281%29.png?1718232706'
+  );
+});

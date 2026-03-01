@@ -28,6 +28,7 @@ import { createDailySnapshotService } from './services/snapshots/daily-snapshot.
 import { createManualTokenService } from './services/tokens/manual-token.service.js';
 import { createTokenIconService } from './services/tokens/token-icon.service.js';
 import { createValuationService } from './services/valuation/valuation.service.js';
+import { createDexscreenerClient } from './services/valuation/dexscreener.client.js';
 import { createBalanceBatcher } from './services/wallet-scan/balance-batcher.js';
 import { createEvmBalanceResolver } from './services/wallet-scan/evm-balance-resolver.js';
 import { createWalletScanService } from './services/wallet-scan/wallet-scan.service.js';
@@ -78,8 +79,10 @@ export function createApp({
       birdeyeClient,
       coingeckoClient
     });
+  const dexscreenerClient = createDexscreenerClient();
   const valuationService = createValuationService({
-    coingeckoClient
+    coingeckoClient,
+    dexFallbackClient: dexscreenerClient
   });
   const tokenIconService = createTokenIconService({
     chainsRepository: resolvedChainsRepository,

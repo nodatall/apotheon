@@ -38,6 +38,7 @@ const CHAIN_BADGE_ICON_BY_SLUG = {
   'binance-smart-chain': '/chains/bsc.png',
   avalanche: '/chains/avalanche.png',
   'avalanche-c-chain': '/chains/avalanche.png',
+  beam: '/chains/beam.png',
   solana: '/chains/solana.png',
   ronin: '/chains/ronin.png'
 };

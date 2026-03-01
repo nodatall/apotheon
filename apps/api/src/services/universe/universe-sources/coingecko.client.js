@@ -13,6 +13,7 @@ function resolveCoinGeckoPlatform(chain) {
     polygon: 'polygon-pos',
     bsc: 'binance-smart-chain',
     avalanche: 'avalanche',
+    beam: 'beam',
     ronin: 'ronin'
   };
 
@@ -36,6 +37,7 @@ function resolveNativeCoinId(chain) {
     polygon: 'matic-network',
     bsc: 'binancecoin',
     avalanche: 'avalanche-2',
+    beam: 'beam-2',
     ronin: 'ronin'
   };
 
