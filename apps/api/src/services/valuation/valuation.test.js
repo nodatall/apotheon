@@ -74,3 +74,26 @@ test('valuation: supports valuationContractOrMint override for pricing', async (
   assert.equal(valued.usdPrice, 2500);
   assert.equal(valued.usdValue, 1250);
 });
+
+test('valuation: supports native references via CoinGecko native pricing', async () => {
+  const valuationService = createValuationService({
+    coingeckoClient: {
+      getPricesByContracts: async () => ({}),
+      getNativeUsdPrice: async () => 0.0275
+    }
+  });
+
+  const [valued] = await valuationService.valuatePositions({
+    chain: { slug: 'ronin', family: 'evm' },
+    positions: [
+      {
+        contractOrMint: 'native:ronin',
+        quantity: 100
+      }
+    ]
+  });
+
+  assert.equal(valued.valuationStatus, 'known');
+  assert.equal(valued.usdPrice, 0.0275);
+  assert.equal(valued.usdValue, 2.75);
+});

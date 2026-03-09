@@ -1,4 +1,104 @@
 import { Router } from 'express';
+import { normalizeAddressForChain } from '../services/shared/address-normalization.js';
+
+function deriveWalletScanStatus({ scanRunStatus, scanSummary, scanError }) {
+  if (scanRunStatus) {
+    return scanRunStatus;
+  }
+
+  if (!scanSummary) {
+    return scanError ? 'failed' : null;
+  }
+
+  if (scanError && scanSummary.attemptedWalletCount === 0) {
+    return 'failed';
+  }
+
+  if (scanSummary.attemptedWalletCount === 0) {
+    return 'skipped';
+  }
+
+  return scanSummary.failedWalletCount > 0 ? 'partial' : 'success';
+}
+
+async function propagateFamilyAddressesToChain({
+  chainsRepository,
+  walletsRepository,
+  targetChain
+}) {
+  if (!walletsRepository?.listWallets || !walletsRepository?.getWalletByChainAndAddress) {
+    return {
+      attemptedCount: 0,
+      createdCount: 0,
+      reactivatedCount: 0,
+      alreadyTrackedCount: 0,
+      sourceWalletCount: 0
+    };
+  }
+
+  const allChains = chainsRepository?.listChains ? await chainsRepository.listChains() : [];
+  const chainById = new Map(allChains.map((chain) => [chain.id, chain]));
+  const activeWallets = await walletsRepository.listWallets({ includeInactive: false });
+
+  const sourceWallets = activeWallets.filter((wallet) => {
+    if (!wallet?.chainId || wallet.chainId === targetChain.id) {
+      return false;
+    }
+    const sourceChain = chainById.get(wallet.chainId);
+    return sourceChain?.family === targetChain.family;
+  });
+
+  const uniqueByAddress = new Map();
+  for (const wallet of sourceWallets) {
+    const normalizedAddress = normalizeAddressForChain({
+      family: targetChain.family,
+      address: wallet.address
+    });
+    if (!normalizedAddress) {
+      continue;
+    }
+    if (!uniqueByAddress.has(normalizedAddress)) {
+      uniqueByAddress.set(normalizedAddress, wallet);
+    }
+  }
+
+  let createdCount = 0;
+  let reactivatedCount = 0;
+  let alreadyTrackedCount = 0;
+  for (const [normalizedAddress, sourceWallet] of uniqueByAddress.entries()) {
+    const existing = await walletsRepository.getWalletByChainAndAddress(
+      targetChain.id,
+      normalizedAddress
+    );
+    if (!existing) {
+      await walletsRepository.createWallet({
+        chainId: targetChain.id,
+        address: normalizedAddress,
+        label: sourceWallet?.label ?? null
+      });
+      createdCount += 1;
+      continue;
+    }
+
+    if (existing.isActive) {
+      alreadyTrackedCount += 1;
+      continue;
+    }
+
+    await walletsRepository.reactivateWallet(existing.id, {
+      label: sourceWallet?.label ?? null
+    });
+    reactivatedCount += 1;
+  }
+
+  return {
+    attemptedCount: uniqueByAddress.size,
+    createdCount,
+    reactivatedCount,
+    alreadyTrackedCount,
+    sourceWalletCount: sourceWallets.length
+  };
+}
 
 export function createAssetsRouter({
   chainsRepository,
@@ -61,6 +161,10 @@ export function createAssetsRouter({
         }
       }
 
+      const existingTrackedTokenCount = trackedTokensRepository.countTrackedTokensByChain
+        ? await trackedTokensRepository.countTrackedTokensByChain({ chainId, includeInactive: false })
+        : null;
+
       const token = await manualTokenService.registerManualToken({
         chain,
         contractOrMint,
@@ -69,22 +173,86 @@ export function createAssetsRouter({
         decimals
       });
 
-      let scan = null;
       let scanError = null;
-      if (wallet) {
-        try {
-          scan = await walletScanService.rescanWallet({ walletId: wallet.id });
-        } catch (error) {
-          scanError = error instanceof Error ? error.message : String(error);
+      let scanSummary = null;
+      let propagationSummary = null;
+      const shouldPropagate =
+        existingTrackedTokenCount !== null && existingTrackedTokenCount === 0;
+      if (shouldPropagate) {
+        propagationSummary = await propagateFamilyAddressesToChain({
+          chainsRepository,
+          walletsRepository,
+          targetChain: chain
+        });
+      }
+
+      let chainWallets = [];
+      try {
+        const listedWallets = await walletsRepository.listWallets({ chainId, includeInactive: false });
+        chainWallets = Array.isArray(listedWallets) ? listedWallets : [];
+      } catch (error) {
+        scanError = error instanceof Error ? error.message : String(error);
+        scanSummary = {
+          mode: 'chain_wallets',
+          chainId,
+          attemptedWalletCount: 0,
+          successfulWalletCount: 0,
+          failedWalletCount: 0,
+          failures: [],
+          message: 'Token added, but failed to load active addresses for scan.'
+        };
+      }
+
+      if (!scanSummary) {
+        const failures = [];
+        let attemptedWalletCount = 0;
+
+        for (const chainWallet of chainWallets) {
+          attemptedWalletCount += 1;
+          try {
+            await walletScanService.rescanWallet({ walletId: chainWallet.id });
+          } catch (error) {
+            failures.push({
+              walletId: chainWallet.id,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
         }
+
+        const failedWalletCount = failures.length;
+        const successfulWalletCount = attemptedWalletCount - failedWalletCount;
+        const hasFailures = failedWalletCount > 0;
+        scanSummary = {
+          mode: 'chain_wallets',
+          chainId,
+          attemptedWalletCount,
+          successfulWalletCount,
+          failedWalletCount,
+          failures,
+          message:
+            attemptedWalletCount === 0
+              ? 'No active addresses on this chain to scan.'
+              : hasFailures
+                ? `Rescanned ${successfulWalletCount}/${attemptedWalletCount} addresses.`
+                : `Rescanned ${attemptedWalletCount} addresses.`
+        };
+        scanError = hasFailures
+          ? `Failed to rescan ${failedWalletCount} address${failedWalletCount === 1 ? '' : 'es'}.`
+          : null;
       }
 
       res.status(201).json({
         data: {
           ...token,
-          walletScanId: scan?.scanRun?.id ?? null,
-          walletScanStatus: scan?.scanRun?.status ?? null,
-          walletScanError: scanError
+          walletScanId: null,
+          walletScanStatus: deriveWalletScanStatus({
+            scanRunStatus: null,
+            scanSummary,
+            scanError
+          }),
+          walletScanError: scanError,
+          scanSummary,
+          propagationSummary
         }
       });
     } catch (error) {

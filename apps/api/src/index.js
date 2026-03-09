@@ -28,6 +28,7 @@ import { createDailySnapshotService } from './services/snapshots/daily-snapshot.
 import { createManualTokenService } from './services/tokens/manual-token.service.js';
 import { createTokenIconService } from './services/tokens/token-icon.service.js';
 import { createValuationService } from './services/valuation/valuation.service.js';
+import { createDexscreenerClient } from './services/valuation/dexscreener.client.js';
 import { createBalanceBatcher } from './services/wallet-scan/balance-batcher.js';
 import { createEvmBalanceResolver } from './services/wallet-scan/evm-balance-resolver.js';
 import { createWalletScanService } from './services/wallet-scan/wallet-scan.service.js';
@@ -78,8 +79,10 @@ export function createApp({
       birdeyeClient,
       coingeckoClient
     });
+  const dexscreenerClient = createDexscreenerClient();
   const valuationService = createValuationService({
-    coingeckoClient
+    coingeckoClient,
+    dexFallbackClient: dexscreenerClient
   });
   const tokenIconService = createTokenIconService({
     chainsRepository: resolvedChainsRepository,
@@ -182,6 +185,10 @@ export function createApp({
   return {
     app,
     chainsRepository: resolvedChainsRepository,
+    walletsRepository: resolvedWalletsRepository,
+    trackedTokensRepository: resolvedTrackedTokensRepository,
+    tokenUniverseRepository: resolvedTokenUniverseRepository,
+    walletScanService: resolvedWalletScanService,
     universeRefreshService: resolvedUniverseRefreshService,
     dailySnapshotService
   };
@@ -197,7 +204,16 @@ async function seedBuiltInChains(chainsRepository) {
 
 async function start() {
   const runtimeEnv = loadRuntimeEnv();
-  const { app, chainsRepository, universeRefreshService, dailySnapshotService } = createApp({
+  const {
+    app,
+    chainsRepository,
+    walletsRepository,
+    trackedTokensRepository,
+    tokenUniverseRepository,
+    walletScanService,
+    universeRefreshService,
+    dailySnapshotService
+  } = createApp({
     runtimeEnv
   });
   await seedBuiltInChains(chainsRepository);
@@ -207,20 +223,25 @@ async function start() {
   });
 
   const scheduler = createScheduler({
+    chainsRepository,
+    walletsRepository,
+    trackedTokensRepository,
+    tokenUniverseRepository,
+    walletScanService,
     universeRefreshService,
     dailySnapshotService
   });
 
-  scheduler.runDailyJobs().catch((error) => {
+  scheduler.runAutoScanCycle().catch((error) => {
     console.error('Initial scheduler run failed:', error);
   });
 
-  const intervalMs = Number(process.env.SCHEDULER_INTERVAL_MS || 60_000);
+  const intervalMs = Number(process.env.AUTO_SCAN_INTERVAL_MS || process.env.SCHEDULER_INTERVAL_MS || 300_000);
   const timer = setInterval(() => {
-    scheduler.runDailyJobs().catch((error) => {
+    scheduler.runAutoScanCycle().catch((error) => {
       console.error('Scheduled job run failed:', error);
     });
-  }, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 60_000);
+  }, Number.isFinite(intervalMs) && intervalMs > 0 ? intervalMs : 300_000);
   timer.unref?.();
 
   return server;

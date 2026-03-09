@@ -74,6 +74,76 @@ test('wallet-scan-trigger: refresh failures surface actionable snapshot error', 
   );
 });
 
+test('wallet-scan-trigger: uses tracked-token fallback snapshot when refresh fails on unsupported chain', async () => {
+  const upsertSnapshotCalls = [];
+  const createdRuns = [];
+  const service = createWalletScanService({
+    chainsRepository: {
+      getChainById: async () => ({ id: 'chain-ronin', slug: 'ronin', family: 'evm' })
+    },
+    walletsRepository: {
+      getWalletById: async () => ({
+        id: 'wallet-1',
+        chainId: 'chain-ronin',
+        address: '0x1234567890123456789012345678901234567890'
+      })
+    },
+    tokenUniverseRepository: {
+      getLatestScanEligibleSnapshot: async () => null,
+      getSnapshotItems: async () => [],
+      upsertSnapshot: async (input) => {
+        upsertSnapshotCalls.push(input);
+        return { id: 'snapshot-fallback-1', ...input };
+      },
+      replaceSnapshotItems: async () => []
+    },
+    universeRefreshService: {
+      refreshChainById: async () => {
+        throw new Error('fallback provider unsupported for chain');
+      }
+    },
+    scansRepository: {
+      createScanRun: async (input) => {
+        createdRuns.push(input);
+        return { id: 'scan-1', ...input };
+      },
+      updateScanRun: async (id, changes) => ({ id, ...changes }),
+      upsertScanItem: async () => ({})
+    },
+    trackedTokensRepository: {
+      countTrackedTokensByChain: async () => 1,
+      listTrackedTokens: async () => [
+        {
+          id: 'token-usdc',
+          chainId: 'chain-ronin',
+          contractOrMint: '0x0b7007c13325c48911f73a2dad5fa5dcbf808adc',
+          symbol: 'USDC',
+          decimals: 6
+        }
+      ],
+      upsertTrackedToken: async () => ({ id: 'token-usdc' })
+    },
+    balanceBatcher: {
+      resolveBalances: async () => [
+        {
+          contractOrMint: '0x0b7007c13325c48911f73a2dad5fa5dcbf808adc',
+          balanceRaw: '1000000',
+          balanceNormalized: 1,
+          resolutionError: false
+        }
+      ]
+    }
+  });
+
+  const outcome = await service.runScan({ walletId: 'wallet-1' });
+
+  assert.equal(upsertSnapshotCalls.length, 1);
+  assert.equal(upsertSnapshotCalls[0].chainId, 'chain-ronin');
+  assert.equal(upsertSnapshotCalls[0].status, 'partial');
+  assert.equal(createdRuns[0].universeSnapshotId, 'snapshot-fallback-1');
+  assert.equal(outcome.universeSnapshotId, 'snapshot-fallback-1');
+});
+
 test('wallet-scan-trigger: scan fails when all token balance resolutions fail', async () => {
   const updateCalls = [];
   const service = createWalletScanService({

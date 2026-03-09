@@ -69,6 +69,53 @@ export function createTrackedTokensRepository({ pool }) {
     return rows.map(mapTrackedTokenRow);
   }
 
+  async function countTrackedTokensByChain({ chainId, includeInactive = false } = {}) {
+    const { rows } = await pool.query(
+      `
+        SELECT COUNT(*)::int AS token_count
+        FROM tracked_tokens
+        WHERE chain_id = $1
+          AND ($2::boolean = TRUE OR is_active = TRUE)
+      `,
+      [chainId, includeInactive]
+    );
+
+    return Number(rows[0]?.token_count ?? 0);
+  }
+
+  async function upsertTrackedTokensBatch({
+    chainId,
+    tokens,
+    metadataSource = 'auto',
+    trackingSource = 'scan'
+  }) {
+    if (!Array.isArray(tokens) || tokens.length === 0) {
+      return [];
+    }
+
+    const upserted = [];
+    for (const token of tokens) {
+      const contractOrMint =
+        typeof token?.contractOrMint === 'string' ? token.contractOrMint.trim() : '';
+      if (!contractOrMint) {
+        continue;
+      }
+
+      const upsertedToken = await upsertTrackedToken({
+        chainId,
+        contractOrMint,
+        symbol: typeof token?.symbol === 'string' ? token.symbol : null,
+        name: typeof token?.name === 'string' ? token.name : null,
+        decimals: Number.isInteger(token?.decimals) ? token.decimals : null,
+        metadataSource,
+        trackingSource
+      });
+      upserted.push(upsertedToken);
+    }
+
+    return upserted;
+  }
+
   async function setTrackedTokenActive(id, isActive) {
     const { rows } = await pool.query(
       `
@@ -86,8 +133,10 @@ export function createTrackedTokensRepository({ pool }) {
   }
 
   return {
+    countTrackedTokensByChain,
     listTrackedTokens,
     setTrackedTokenActive,
-    upsertTrackedToken
+    upsertTrackedToken,
+    upsertTrackedTokensBatch
   };
 }
